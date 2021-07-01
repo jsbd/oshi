@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -24,35 +24,48 @@
 package oshi.demo;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import oshi.SystemInfo;
 import oshi.hardware.HardwareAbstractionLayer;
 import oshi.hardware.NetworkIF;
+import oshi.util.FileUtil;
 
 /**
  * Uses OSHI to attempt to identify whether the user is on a Virtual Machine
  */
 public class DetectVM {
 
-    // Constant for Mac address OUI portion, the first 24 bits of MAC address
-    // https://www.webopedia.com/TERM/O/OUI.html
-    private static final Map<String, String> vmMacAddressOUI = new HashMap<>();
+    private static final String OSHI_VM_MAC_ADDR_PROPERTIES = "oshi.vmmacaddr.properties";
+    private static final Properties vmMacAddressProps = FileUtil
+            .readPropertiesFromFilename(OSHI_VM_MAC_ADDR_PROPERTIES);
+
+    // Constant for CPU vendor string
+    private static final Map<String, String> vmVendor = new HashMap<>();
     static {
-        vmMacAddressOUI.put("00:50:56", "VMware ESX 3");
-        vmMacAddressOUI.put("00:0C:29", "VMware ESX 3");
-        vmMacAddressOUI.put("00:05:69", "VMware ESX 3");
-        vmMacAddressOUI.put("00:03:FF", "Microsoft Hyper-V");
-        vmMacAddressOUI.put("00:1C:42", "Parallels Desktop");
-        vmMacAddressOUI.put("00:0F:4B", "Virtual Iron 4");
-        vmMacAddressOUI.put("00:16:3E", "Xen or Oracle VM");
-        vmMacAddressOUI.put("08:00:27", "VirtualBox");
+        vmVendor.put("bhyve bhyve", "bhyve");
+        vmVendor.put("KVMKVMKVM", "KVM");
+        vmVendor.put("TCGTCGTCGTCG", "QEMU");
+        vmVendor.put("Microsoft Hv", "Microsoft Hyper-V or Windows Virtual PC");
+        vmVendor.put("lrpepyh vr", "Parallels");// (endianness mismatch of "prl hyperv ")
+        vmVendor.put("VMwareVMware", "VMware");
+        vmVendor.put("XenVMMXenVMM", "Xen HVM");
+        vmVendor.put("ACRNACRNACRN", "Project ACRN");
+        vmVendor.put("QNXQVMBSQG", "QNX Hypervisor");
     }
 
     private static final String[] vmModelArray = new String[] { "Linux KVM", "Linux lguest", "OpenVZ", "Qemu",
             "Microsoft Virtual PC", "VMWare", "linux-vserver", "Xen", "FreeBSD Jail", "VirtualBox", "Parallels",
             "Linux Containers", "LXC" };
 
+    /**
+     * The main method, executing the {@link #identifyVM} method.
+     *
+     * @param args
+     *            Arguments, ignored.
+     */
     public static void main(String[] args) {
         String vmString = identifyVM();
 
@@ -64,24 +77,28 @@ public class DetectVM {
     }
 
     /**
-     * The function attempts to identify which Virtual Machine (VM) based on
-     * common VM signatures in MAC address and computer model.
-     * 
-     * @return A string indicating the machine's virtualization info if it can
-     *         be determined, or an emptry string otherwise.
+     * The function attempts to identify which Virtual Machine (VM) based on common
+     * VM signatures in MAC address and computer model.
+     *
+     * @return A string indicating the machine's virtualization info if it can be
+     *         determined, or an emptry string otherwise.
      */
     public static String identifyVM() {
-
         SystemInfo si = new SystemInfo();
         HardwareAbstractionLayer hw = si.getHardware();
+        // Check CPU Vendor
+        String vendor = hw.getProcessor().getProcessorIdentifier().getVendor().trim();
+        if (vmVendor.containsKey(vendor)) {
+            return vmVendor.get(vendor);
+        }
 
         // Try well known MAC addresses
-        NetworkIF[] nifs = hw.getNetworkIFs();
-
+        List<NetworkIF> nifs = hw.getNetworkIFs();
         for (NetworkIF nif : nifs) {
-            String mac = nif.getMacaddr().substring(0, 8).toUpperCase();
-            if (vmMacAddressOUI.containsKey(mac)) {
-                return vmMacAddressOUI.get(mac);
+            String mac = nif.getMacaddr().toUpperCase();
+            String oui = mac.length() > 7 ? mac.substring(0, 8) : mac;
+            if (vmMacAddressProps.containsKey(oui)) {
+                return vmMacAddressProps.getProperty(oui);
             }
         }
 

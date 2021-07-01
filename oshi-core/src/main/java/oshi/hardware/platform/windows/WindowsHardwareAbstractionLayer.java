@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,11 +23,16 @@
  */
 package oshi.hardware.platform.windows;
 
+import java.util.List;
+
+import oshi.annotation.concurrent.ThreadSafe;
 import oshi.hardware.CentralProcessor;
 import oshi.hardware.ComputerSystem;
 import oshi.hardware.Display;
 import oshi.hardware.GlobalMemory;
+import oshi.hardware.GraphicsCard;
 import oshi.hardware.HWDiskStore;
+import oshi.hardware.LogicalVolumeGroup;
 import oshi.hardware.NetworkIF;
 import oshi.hardware.PowerSource;
 import oshi.hardware.Sensors;
@@ -35,99 +40,69 @@ import oshi.hardware.SoundCard;
 import oshi.hardware.UsbDevice;
 import oshi.hardware.common.AbstractHardwareAbstractionLayer;
 
-public class WindowsHardwareAbstractionLayer extends AbstractHardwareAbstractionLayer {
+/**
+ * WindowsHardwareAbstractionLayer class.
+ */
+@ThreadSafe
+public final class WindowsHardwareAbstractionLayer extends AbstractHardwareAbstractionLayer {
 
-    private static final long serialVersionUID = 1L;
-
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public ComputerSystem getComputerSystem() {
-        if (this.computerSystem == null) {
-            this.computerSystem = new WindowsComputerSystem();
-        }
-        return this.computerSystem;
+    public ComputerSystem createComputerSystem() {
+        return new WindowsComputerSystem();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public GlobalMemory getMemory() {
-        if (this.memory == null) {
-            this.memory = new WindowsGlobalMemory();
-        }
-        return this.memory;
+    public GlobalMemory createMemory() {
+        return new WindowsGlobalMemory();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public CentralProcessor getProcessor() {
-        if (this.processor == null) {
-            this.processor = new WindowsCentralProcessor();
-        }
-        return this.processor;
+    public CentralProcessor createProcessor() {
+        return new WindowsCentralProcessor();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public PowerSource[] getPowerSources() {
+    public Sensors createSensors() {
+        return new WindowsSensors();
+    }
+
+    @Override
+    public List<PowerSource> getPowerSources() {
         return WindowsPowerSource.getPowerSources();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public HWDiskStore[] getDiskStores() {
-        return new WindowsDisks().getDisks();
+    public List<HWDiskStore> getDiskStores() {
+        return WindowsHWDiskStore.getDisks();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public Display[] getDisplays() {
+    public List<LogicalVolumeGroup> getLogicalVolumeGroups() {
+        return WindowsLogicalVolumeGroup.getLogicalVolumeGroups();
+    }
+
+    @Override
+    public List<Display> getDisplays() {
         return WindowsDisplay.getDisplays();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public Sensors getSensors() {
-        if (this.sensors == null) {
-            this.sensors = new WindowsSensors();
-        }
-        return this.sensors;
+    public List<NetworkIF> getNetworkIFs(boolean includeLocalInterfaces) {
+        return WindowsNetworkIF.getNetworks(includeLocalInterfaces);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public NetworkIF[] getNetworkIFs() {
-        return new WindowsNetworks().getNetworks();
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public UsbDevice[] getUsbDevices(boolean tree) {
+    public List<UsbDevice> getUsbDevices(boolean tree) {
         return WindowsUsbDevice.getUsbDevices(tree);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public SoundCard[] getSoundCards() {
-        return WindowsSoundCard.getSoundCards().toArray(new SoundCard[0]);
+    public List<SoundCard> getSoundCards() {
+        return WindowsSoundCard.getSoundCards();
+    }
+
+    @Override
+    public List<GraphicsCard> getGraphicsCards() {
+        return WindowsGraphicsCard.getGraphicsCards();
     }
 }

@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,26 +23,30 @@
  */
 package oshi.hardware;
 
-import static org.junit.Assert.assertTrue;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.is;
 
-import org.junit.Test;
+import java.util.List;
+
+import org.junit.jupiter.api.Test;
 
 import oshi.SystemInfo;
 
 /**
  * Tests Displays
  */
-public class DisplayTest {
+class DisplayTest {
 
     /**
      * Test displays
      */
     @Test
-    public void testDisplay() {
+    void testDisplay() {
         SystemInfo si = new SystemInfo();
-        Display[] displays = si.getHardware().getDisplays();
+        List<Display> displays = si.getHardware().getDisplays();
         for (Display d : displays) {
-            assertTrue(d.getEdid().length >= 128);
+            assertThat("EDID Byte length should be at least 128", d.getEdid().length, is(greaterThanOrEqualTo(128)));
         }
     }
 }

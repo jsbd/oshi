@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,108 +23,143 @@
  */
 package oshi.hardware;
 
-import java.io.Serializable;
+import java.util.Collections;
+import java.util.List;
+
+import oshi.annotation.concurrent.ThreadSafe;
 
 /**
  * A hardware abstraction layer. Provides access to hardware items such as
  * processors, memory, battery, and disks.
- *
- * @author dblock[at]dblock[dot]org
  */
-public interface HardwareAbstractionLayer extends Serializable {
+@ThreadSafe
+public interface HardwareAbstractionLayer {
 
     /**
-     * Instantiates a {@link ComputerSystem} object. This represents the
-     * physical hardware, including components such as BIOS/Firmware and a
+     * Instantiates a {@link oshi.hardware.ComputerSystem} object. This represents
+     * the physical hardware, including components such as BIOS/Firmware and a
      * motherboard, logic board, etc.
      *
-     * @return a {@link ComputerSystem} object.
+     * @return a {@link oshi.hardware.ComputerSystem} object.
      */
     ComputerSystem getComputerSystem();
 
     /**
-     * Instantiates a {@link CentralProcessor} object. This represents one or
-     * more Logical CPUs.
+     * Instantiates a {@link oshi.hardware.CentralProcessor} object. This represents
+     * one or more Logical CPUs.
      *
-     * @return A {@link CentralProcessor} object.
+     * @return A {@link oshi.hardware.CentralProcessor} object.
      */
     CentralProcessor getProcessor();
 
     /**
-     * Instantiates a {@link GlobalMemory} object.
+     * Instantiates a {@link oshi.hardware.GlobalMemory} object.
      *
      * @return A memory object.
      */
     GlobalMemory getMemory();
 
     /**
-     * Instantiates an array of {@link PowerSource} objects, representing
-     * batteries, etc.
+     * Instantiates a list of {@link oshi.hardware.PowerSource} objects,
+     * representing batteries, etc.
      *
-     * @return An array of PowerSource objects or an empty array if none are
-     *         present.
+     * @return A list of PowerSource objects or an empty list if none are present.
      */
-    PowerSource[] getPowerSources();
+    List<PowerSource> getPowerSources();
 
     /**
-     * Instantiates an array of {@link HWDiskStore} objects, representing a
-     * physical hard disk or other similar storage device
+     * Instantiates a list of {@link oshi.hardware.HWDiskStore} objects,
+     * representing physical hard disks or other similar storage devices.
      *
-     * @return An array of HWDiskStore objects or an empty array if none are
-     *         present.
+     * @return A list of HWDiskStore objects or an empty list if none are present.
      */
-    HWDiskStore[] getDiskStores();
+    List<HWDiskStore> getDiskStores();
 
     /**
-     * Instantiates an array of {@link NetworkIF} objects, representing a
-     * network interface
+     * Instantiates a list of {@link LogicalVolumeGroup} objects, representing a
+     * storage pool or group of devices, partitions, volumes, or other
+     * implementation specific means of file storage.
+     * <p>
+     * If not yet implemented or if logical volume groups do not exist, returns an
+     * empty list.
+     * <p>
+     * Currently implemented for Linux (LVM2), macOS (Core Storage), and Windows
+     * (Storage Spaces).
      *
-     * @return An array of HWNetworkStore objects or an empty array if none are
-     *         present.
+     * @return A list of {@link LogicalVolumeGroup} objects or an empty list if none
+     *         are present.
      */
-    NetworkIF[] getNetworkIFs();
+    default List<LogicalVolumeGroup> getLogicalVolumeGroups() {
+        return Collections.emptyList();
+    }
 
     /**
-     * Instantiates an array of {@link Display} objects, representing monitors
-     * or other video output devices.
+     * Gets a list of non-local {@link NetworkIF} objects, representing a network
+     * interface. The list excludes local interfaces.
      *
-     * @return An array of Display objects or an empty array if none are
-     *         present.
+     * @return A list of {@link NetworkIF} objects representing the interfaces
      */
-    Display[] getDisplays();
+    List<NetworkIF> getNetworkIFs();
 
     /**
-     * Instantiates a {@link Sensors} object, representing CPU temperature and
-     * fan speed
+     * Gets a list {@link NetworkIF} objects, representing a network interface.
+     *
+     * @param includeLocalInterfaces
+     *            whether to include local interfaces (loopback or no hardware
+     *            address) in the result
+     * @return A list of {@link NetworkIF} objects representing the interfaces
+     */
+    List<NetworkIF> getNetworkIFs(boolean includeLocalInterfaces);
+
+    /**
+     * Instantiates a list of {@link oshi.hardware.Display} objects, representing
+     * monitors or other video output devices.
+     *
+     * @return A list of Display objects or an empty list if none are present.
+     */
+    List<Display> getDisplays();
+
+    /**
+     * Instantiates a {@link oshi.hardware.Sensors} object, representing CPU
+     * temperature and fan speed.
      *
      * @return A Sensors object
      */
     Sensors getSensors();
 
     /**
-     * Instantiates an array of {@link UsbDevice} objects, representing devices
-     * connected via a usb port (including internal devices).
-     *
-     * If the value of tree is true, the top level devices returned from this
-     * method are the USB Controllers; connected hubs and devices in its device
-     * tree share that controller's bandwidth. If the value of tree is false,
-     * USB devices (not controllers) are listed in a single flat array.
+     * Instantiates a list of {@link oshi.hardware.UsbDevice} objects, representing
+     * devices connected via a usb port (including internal devices).
+     * <p>
+     * If the value of {@code tree} is true, the top level devices returned from
+     * this method are the USB Controllers; connected hubs and devices in its device
+     * tree share that controller's bandwidth. If the value of {@code tree} is
+     * false, USB devices (not controllers) are listed in a single flat list.
      *
      * @param tree
-     *            WHether to display devices in a nested tree format from their
-     *            controllers
-     * @return An array of UsbDevice objects representing (optionally) the USB
-     *         Controllers and devices connected to them, or an empty array if
-     *         none are present
+     *            If {@code true}, returns devices connected to the existing device,
+     *            accessible via {@link UsbDevice#getConnectedDevices()}. If
+     *            {@code false} returns devices as a flat list with no connected
+     *            device information.
+     * @return A list of UsbDevice objects representing (optionally) the USB
+     *         Controllers and devices connected to them, or an empty list if none
+     *         are present
      */
-    UsbDevice[] getUsbDevices(boolean tree);
+    List<UsbDevice> getUsbDevices(boolean tree);
 
     /**
-     * Instantiates an array of {@link SoundCard} objects, representing the
-     * Sound cards.
+     * Instantiates a list of {@link oshi.hardware.SoundCard} objects, representing
+     * the Sound cards.
      *
-     * @return An array of SoundCard objects or an empty array if none are
-     *         present.
+     * @return A list of SoundCard objects or an empty list if none are present.
      */
-    SoundCard[] getSoundCards();
+    List<SoundCard> getSoundCards();
+
+    /**
+     * Instantiates a list of {@link oshi.hardware.GraphicsCard} objects,
+     * representing the Graphics cards.
+     *
+     * @return A list of objects or an empty list if none are present.
+     */
+    List<GraphicsCard> getGraphicsCards();
 }

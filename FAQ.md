@@ -1,37 +1,131 @@
 What is the intended use of the API?
 ========
-Users should create a new instance of [SystemInfo](http://dblock.github.io/oshi/apidocs/oshi/SystemInfo.html). This provides access to the platform-specific hardware and software interfaces using the respective `get*()` methods. The interfaces in `oshi.hardware` and `oshi.software.os` provide cross-platform functionality. See the `main()` method of [SystemInfoTest](https://github.com/dblock/oshi/blob/master/oshi-core/src/test/java/oshi/SystemInfoTest.java) for sample code.
+Users should create a new instance of [SystemInfo](https://oshi.github.io/oshi/apidocs/oshi/SystemInfo.html) and use the getters from this class to access the platform-specific hardware and software interfaces using the respective `get*()` methods. The interfaces in `oshi.hardware` and `oshi.software.os` provide cross-platform functionality. See the `main()` method of [SystemInfoTest](https://github.com/oshi/oshi/blob/master/oshi-core/src/test/java/oshi/SystemInfoTest.java) for sample code.
 
-Methods return a "snapshot" of current levels. To display values which change over time, it is intended that users poll for information no more frequently than one second. Disk and file system calls may incur some latency and should be polled less frequently. OSHI 4.X will overhaul this behavior; see the [UPGRADING.md](UPGRADING.md) document for more details.
+Methods return a "snapshot" of current levels. To display values which change over time, it is intended that users poll for information no more frequently than approximately every second. Disk and file system calls may incur some latency and should be polled less frequently.
+CPU usage calculation precision depends on the relation of the polling interval to both system clock tick granularity and the number of logical processors.
 
-Is the API compatible between versions?
+Is the API backwards compatible between versions?
 ========
 The interfaces and classes in `oshi.hardware` and `oshi.software.os` are considered the OSHI API and are guaranteed to be compatible with the same major version. Differences between major versions can be found in the [UPGRADING.md](UPGRADING.md) document.  
 
-Most, if not all, of the platform-specific implementations of these APIs in lower level packages will remain the same, although it is not intended that users access platform-specific code, and some changes may occur between minor versions. Supporting code in the `oshi.util` package may, rarely, change between minor versions, usually associated with organizing package structure or changing parsing methods for efficiency/consistency/ease of use.
+Most, if not all, of the platform-specific implementations of these APIs in lower level packages will remain the same, although it is not intended that users access platform-specific code, and some changes may occur between minor versions, most often in the number of arguments passed to constructors or platform-specific methods. Supporting code in the `oshi.driver` and `oshi.util` packages may,
+rarely, change between minor versions, usually associated with organizing package structure or changing parsing methods for efficiency/consistency/ease of use.
 
 Code in the platform-specific `oshi.jna.*` packages is intended to be temporary and will be removed when that respective code is included in the JNA project.
 
+Does OSHI support Open Service Gateway initiative (OSGi) modules?
+========
+OSHI publishes a shaded JAR in the `oshi-core-shaded` artifact built using `maven-shade-plugin` and `maven-bundle-plugin` with manifest updates using `mvn-bnd-plugin`. Submit an issue if the configuration of these plugins needs to be adjusted to support your project.
+
+Does OSHI support Java Module System (JPMS) modules?
+========
+OSHI publishes an `oshi-core-java11` artifact with a full module descriptor (and only modular dependencies), which will allow the existing API to be placed on the module path. This artifact shares the same API as `oshi-core`.
+
+The `oshi-core` artifact includes `Automatic-Module-Name` of `com.github.oshi` in its manifest.  Due to plans to continue to support JDK 8 for many years, there is no plan to otherwise make `oshi-core` modular.
+
+More fine grained modularization is being considered in a possible future major API rewrite targeting JDK 17 compatibility and leveraging features from Project Panama. If you have a specific use case that would benefit from modularization, submit an issue to discuss it.
+
+Is OSHI Thread Safe?
+========
+OSHI 5.X is thread safe with the exceptions noted below. `@Immutable`, `@ThreadSafe`, and `@NotThreadSafe` document
+each class. The following classes are not thread-safe:
+ - `GlobalConfig` does not protect against multiple threads manipulating the configuration programmatically.
+ However, these methods are intended to be used by a single thread at startup in lieu of reading a configuration file.
+ OSHI gives no guarantees on re-reading changed configurations.
+ - On non-Windows platforms, the `getSessions()` method on the `OperatingSystem` interface uses native code which is not thread safe. While OSHI's methods employ synchronization to coordinate access from its own threads, users are cautioned that other operating system code may access the same underlying data structures and produce unexpected results, particularly on servers with frequent new logins.
+The `oshi.os.unix.whoCommand` property may be set to parse the Posix-standard `who` command in preference to the native implementation,
+which may use reentrant code on some platforms.
+ - The `PerfCounterQueryHandler` class is not thread-safe but is only internally used in single-thread contexts,
+and is not intended for user use.
+
+Earlier versions do not guarantee thread safety, and it should not be assumed.
+
 What minimum Java version is required?
 ========
-OSHI 3.x is compatible with Java 7 and will remain so with bug fixes.  OSHI 4.x requires minimum Java 8 compatibility, and OSHI 5.x (envisioned in 2020) will require Java 11.  
+OSHI 3.x is compatible with Java 7, but will not see any added features.  
+
+OSHI 4.x and later require minimum Java 8 compatibility. This minimum level will be retained through at least OpenJDK 8 EOL.
 
 Which operating systems are supported?
 ========
 OSHI has been implemented and tested on the following systems.  Some features may work on earlier versions.
 * Windows 7 and higher.  (Nearly all features work on Vista and most work on Windows XP.)
-* Mac OS X version 10.6 (Snow Leopard) and higher
+* macOS version 10.6 (Snow Leopard) and higher.
 * Linux (Most major distributions) Kernel 2.6 and higher
-* Unix: Solaris 11 (SunOS 5.11) / FreeBSD 10
+* AIX 7.1 (POWER4)
+* FreeBSD 10 
+* OpenBSD 6.8
+* Solaris 11 (SunOS 5.11) 
 
-
-What API features are not implemented on some operating systems?
+How do I resolve JNA `NoClassDefFoundError` or `NoSuchMethodError` issues?
 ========
-The following generally summarizes known exceptions. If you have missing data that is not on this list, please report it in an issue so we can investigate.
-* Windows does not provide a load average, so the Processor's `getSystemLoadAverage()` returns -1.
-* MacOS does not track time processors spend idle due to hard disk latency (iowait) or time spent processing hardware or software interrupts, and returns 0 for those associated tick values.
-* Windows sensor (temperature, fans, voltage) readings are drawn from Microsoft's Windows Management Instrumentation (WMI) API; however, most hardware manufacturers do not publish these readings to WMI. If a value is not available through the Microsoft API, Oshi will attempt to retrieve values as published by the [Open Hardware Monitor](http://openhardwaremonitor.org/) if it is running.  Only temperature sensors are detected on FreeBSD using `coretemp`.
-* Linux, Solaris, and FreeBSD may require either running as root/sudo or additional software installs for full capability, particularly HAL daemon (`hald`/`lshal`) and X (`xrandr`).
+OSHI uses the latest version of JNA, which may conflict with other dependencies your project (or its parent) includes.
+If you experience a `NoClassDefFoundError` or `NoSuchMethodError` issues with JNA artifacts, you likely have
+an older version of either `jna` or `jna-platform` in your classpath from a transitive dependency on another project.
+Consider one or more of the following steps to resolve the conflict:
+ - Listing OSHI earlier (or first) in your dependency list 
+ - Specifying the most recent version of JNA (both `jna` and `jna-platform` artifacts) in your `pom.xml` as dependencies.
+ - If you are using the Spring Boot Starter Parent version 2.2 and earlier that includes JNA as a dependency:
+   - Upgrade to version 2.3 which does not have a JNA dependency (preferred)
+   - If you must use version 2.2 or earlier, override the `jna.version` property to the latest JNA version.
+
+Why does OSHI's Process CPU usage differ from the Windows Task Manager?
+========
+CPU usage is generally calculated as (active time / active+idle time). On a multi-processor system, the "idle" time can be accrued on each/any of the logical processors.
+
+For System and per-Processor CPU ticks, the total number of "idle" ticks is available for this calculation, so they should match all operating system displays, and CPU usage will never exceed 100%.
+
+For per-Process CPU ticks, there is no "idle" counter available, so the calculation ends up being (active time / up time). It is possible
+for a multi-threaded process to accrue more active clock time than elapsed clock time, and result in CPU usage over 100%
+(e.g., on a 4-processor system it could in theory reach 400%). This interpretation matches the value displayed in `ps` or `top` on
+Unix-based operating systems. However, Windows scales process CPU usage to the system, so that the sum of all Process CPU percentages
+can never exceed 100% (ignoring roundoff errors). On a 4-processor system, a single-threaded process maximizing usage of one logical
+processor will show (on Windows) as 25% usage. OSHI's calculation for Process CPU load will report the Unix-based calculation in this
+class, which would be closer to 100%.
+
+If you want per-Process CPU load to match the Windows Task Manager display, you should divide OSHI's calculation by the number of logical processors.  This is an entirely cosmetic preference.
+
+How is OSHI different from SIGAR?
+========
+Both OSHI and Hyperic's [SIGAR](https://github.com/hyperic/sigar) (System Information Gatherer and Reporter)
+provide cross-platform operating system and hardware information, and are both used to support distributed
+system monitoring and reporting, among other use cases. The OSHI project was started, and development
+continues, to overcome specific shortcomings in SIGAR for some use cases.  OSHI does have feature parity
+with nearly all SIGAR functions. Key differences include:
+ - **Additional DLL** SIGAR's implementation is primarily in native C, compiled separately for its supported
+operating systems. It therefore requires users to download an additional DLL specific to their operating
+system. This does have a few advantages for specific, targeted use cases, including faster native code routines,
+and availability of some native compiler intrinsics. In contrast, OSHI accesses native APIs using JNA, which
+does not require user installation of any additional platform-specific DLLs.
+ - **Corporate Development / Abandonment** SIGAR was developed commercially at Hyperic to support monitoring of
+their HQ product. Hyperic's products were later acquired by VMWare, which has transitioned away from Hyperic
+products and have completely abandoned SIGAR. The [last release](https://github.com/hyperic/sigar/releases/tag/sigar-1.6.4)
+was in 2010 and the [last source commit](https://github.com/hyperic/sigar/commit/7a6aefc7fb315fc92445edcb902a787a6f0ddbd9)
+was in 2015. [Multiple independent forks](https://github.com/hyperic/sigar/issues/95) by existing users attempt
+to fix specific bugs/incompatibilities but none has emerged as a maintained/released fork.  In contrast, OSHI's 
+development has been entirely done by open source volunteers, and it is under active development as of 2020.
+ - **Support** SIGAR is completely unsupported by its authors, and there is no organized community support.
+OSHI is supported actively to fix bugs, respond to questions, and implement new features.
+
+Does OSHI work on ARM hardware?
+========
+Yes, CI is actively conducted on Linux ARM hardware and other platforms will be added when hardware is
+available for such testing. Note that many features (e.g., CPUID, and processor identification such as
+family, model, stepping, and vendor frequency) are based on Intel chips and may have different corresponding
+meanings.
+
+Does OSHI work on Apple M1 hardware?
+========
+OSHI works with native `AArch64` support when JNA is version 5.7.0 or later.
+
+OSHI works using virtual x86 hardware under Rosetta if you are executing an x86-based JVM. 
+
+Does OSHI work on Raspberry Pi hardware?
+========
+Yes, most of the Linux code works here and other Pi-specific code has been implemented but has seen 
+limited testing.  As the developers do not have a Pi to test on, users reporting issues should be 
+prepared to help test solutions.
 
 Will you implement ... ?
 ========

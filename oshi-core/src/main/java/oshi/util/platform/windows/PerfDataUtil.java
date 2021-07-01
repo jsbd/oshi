@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -38,6 +38,8 @@ import com.sun.jna.platform.win32.WinError;
 import com.sun.jna.platform.win32.WinNT;
 import com.sun.jna.platform.win32.WinNT.HANDLEByReference;
 
+import oshi.annotation.concurrent.Immutable;
+import oshi.annotation.concurrent.ThreadSafe;
 import oshi.util.FormatUtil;
 import oshi.util.ParseUtil;
 import oshi.util.Util;
@@ -45,14 +47,9 @@ import oshi.util.Util;
 /**
  * Helper class to centralize the boilerplate portions of PDH counter setup and
  * allow applications to easily add, query, and remove counters.
- *
- * @author widdis[at]gmail[dot]com
  */
-public class PerfDataUtil {
-    /**
-     * Instance to generate the PerfCounter class.
-     */
-    public static final PerfDataUtil INSTANCE = new PerfDataUtil();
+@ThreadSafe
+public final class PerfDataUtil {
 
     private static final Logger LOG = LoggerFactory.getLogger(PerfDataUtil.class);
 
@@ -60,10 +57,13 @@ public class PerfDataUtil {
     private static final DWORDByReference PDH_FMT_RAW = new DWORDByReference(new DWORD(Pdh.PDH_FMT_RAW));
     private static final Pdh PDH = Pdh.INSTANCE;
 
-    // Is AddEnglishCounter available?
     private static final boolean IS_VISTA_OR_GREATER = VersionHelpers.IsWindowsVistaOrGreater();
 
-    public class PerfCounter {
+    /**
+     * Encapsulates the three string components of a performance counter
+     */
+    @Immutable
+    public static class PerfCounter {
         private String object;
         private String instance;
         private String counter;
@@ -97,7 +97,7 @@ public class PerfDataUtil {
 
         /**
          * Returns the path for this counter
-         * 
+         *
          * @return A string representing the counter path
          */
         public String getCounterPath() {
@@ -123,11 +123,10 @@ public class PerfDataUtil {
      *            The instance of the counter, or null if no instance
      * @param counter
      *            The counter name
-     * @return A PerfCounter object encapsulating the object, instance, and
-     *         counter
+     * @return A PerfCounter object encapsulating the object, instance, and counter
      */
     public static PerfCounter createCounter(String object, String instance, String counter) {
-        return INSTANCE.new PerfCounter(object, instance, counter);
+        return new PerfCounter(object, instance, counter);
     }
 
     /**
@@ -180,7 +179,7 @@ public class PerfDataUtil {
 
     /**
      * Close a pdh query
-     * 
+     *
      * @param q
      *            pointer to the query
      * @return true if successful
@@ -194,8 +193,8 @@ public class PerfDataUtil {
      *
      * @param counter
      *            The counter to get the value of
-     * @return long value of the counter, or negative value representing an
-     *         error code
+     * @return long value of the counter, or negative value representing an error
+     *         code
      */
     public static long queryCounter(WinNT.HANDLEByReference counter) {
         PDH_RAW_COUNTER counterValue = new PDH_RAW_COUNTER();
@@ -215,7 +214,8 @@ public class PerfDataUtil {
      * @param query
      *            Pointer to the query to add the counter
      * @param path
-     *            String name of the PerfMon counter
+     *            String name of the PerfMon counter. For Vista+, must be in
+     *            English. Must localize this path for pre-Vista.
      * @param p
      *            Pointer to the counter
      * @return true if successful

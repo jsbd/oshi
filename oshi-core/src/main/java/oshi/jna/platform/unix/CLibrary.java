@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -27,31 +27,23 @@ import com.sun.jna.Library;
 import com.sun.jna.Pointer;
 import com.sun.jna.Structure;
 import com.sun.jna.Structure.FieldOrder;
-import com.sun.jna.ptr.IntByReference;
+import com.sun.jna.platform.unix.LibCAPI;
 import com.sun.jna.ptr.PointerByReference;
 
 /**
  * C library with code common to all *nix-based operating systems. This class
  * should be considered non-API as it may be removed if/when its code is
  * incorporated into the JNA project.
- *
- * @author widdis[at]gmail[dot]com
  */
-public interface CLibrary extends Library {
+public interface CLibrary extends LibCAPI, Library {
 
-    /*
-     * For getaddrinfo()
-     */
     int AI_CANONNAME = 2;
 
-    /**
-     * Return type for BSD sysctl kern.boottime
-     */
-    @FieldOrder({ "tv_sec", "tv_usec" })
-    class Timeval extends Structure {
-        public long tv_sec; // seconds
-        public long tv_usec; // microseconds
-    }
+    int UT_LINESIZE = 32;
+    int UT_NAMESIZE = 32;
+    int UT_HOSTSIZE = 256;
+    int LOGIN_PROCESS = 6; // Session leader of a logged in user.
+    int USER_PROCESS = 7; // Normal process.
 
     @FieldOrder({ "sa_family", "sa_data" })
     class Sockaddr extends Structure {
@@ -86,119 +78,53 @@ public interface CLibrary extends Library {
         }
     }
 
-    /**
-     * The sysctl() function retrieves system information and allows processes
-     * with appropriate privileges to set system information. The information
-     * available from sysctl() consists of integers, strings, and tables.
-     *
-     * The state is described using a "Management Information Base" (MIB) style
-     * name, listed in name, which is a namelen length array of integers.
-     *
-     * The information is copied into the buffer specified by oldp. The size of
-     * the buffer is given by the location specified by oldlenp before the call,
-     * and that location gives the amount of data copied after a successful call
-     * and after a call that returns with the error code ENOMEM. If the amount
-     * of data available is greater than the size of the buffer supplied, the
-     * call supplies as much data as fits in the buffer provided and returns
-     * with the error code ENOMEM. If the old value is not desired, oldp and
-     * oldlenp should be set to NULL.
-     *
-     * The size of the available data can be determined by calling sysctl() with
-     * the NULL argument for oldp. The size of the available data will be
-     * returned in the location pointed to by oldlenp. For some operations, the
-     * amount of space may change often. For these operations, the system
-     * attempts to round up so that the returned size is large enough for a call
-     * to return the data shortly thereafter.
-     *
-     * To set a new value, newp is set to point to a buffer of length newlen
-     * from which the requested value is to be taken. If a new value is not to
-     * be set, newp should be set to NULL and newlen set to 0.
-     *
-     * @param name
-     *            MIB array of integers
-     * @param namelen
-     *            length of the MIB array
-     * @param oldp
-     *            Information retrieved
-     * @param oldlenp
-     *            Size of information retrieved
-     * @param newp
-     *            Information to be written
-     * @param newlen
-     *            Size of information to be written
-     * @return 0 on success; sets errno on failure
+    /*
+     * Between macOS and FreeBSD there are multiple versions of some tcp/udp/ip
+     * stats structures. Since we only need a few of the hundreds of fields, we can
+     * improve performance by selectively reading the ints from the appropriate
+     * offsets, which are consistent across the structure. These classes include the
+     * common fields and offsets.
      */
-    int sysctl(int[] name, int namelen, Pointer oldp, IntByReference oldlenp, Pointer newp, int newlen);
 
-    /**
-     * The sysctlbyname() function accepts an ASCII representation of the name
-     * and internally looks up the integer name vector. Apart from that, it
-     * behaves the same as the standard sysctl() function.
-     *
-     * @param name
-     *            ASCII representation of the MIB name
-     * @param oldp
-     *            Information retrieved
-     * @param oldlenp
-     *            Size of information retrieved
-     * @param newp
-     *            Information to be written
-     * @param newlen
-     *            Size of information to be written
-     * @return 0 on success; sets errno on failure
-     */
-    int sysctlbyname(String name, Pointer oldp, IntByReference oldlenp, Pointer newp, int newlen);
+    class BsdTcpstat {
+        public int tcps_connattempt; // 0
+        public int tcps_accepts; // 4
+        public int tcps_drops; // 12
+        public int tcps_conndrops; // 16
+        public int tcps_sndpack; // 64
+        public int tcps_sndrexmitpack; // 72
+        public int tcps_rcvpack; // 104
+        public int tcps_rcvbadsum; // 112
+        public int tcps_rcvbadoff; // 116
+        public int tcps_rcvmemdrop; // 120
+        public int tcps_rcvshort; // 124
+    }
 
-    /**
-     * The sysctlnametomib() function accepts an ASCII representation of the
-     * name, looks up the integer name vector, and returns the numeric
-     * representation in the mib array pointed to by mibp. The number of
-     * elements in the mib array is given by the location specified by sizep
-     * before the call, and that location gives the number of entries copied
-     * after a successful call. The resulting mib and size may be used in
-     * subsequent sysctl() calls to get the data associated with the requested
-     * ASCII name. This interface is intended for use by applications that want
-     * to repeatedly request the same variable (the sysctl() function runs in
-     * about a third the time as the same request made via the sysctlbyname()
-     * function).
-     *
-     * The number of elements in the mib array can be determined by calling
-     * sysctlnametomib() with the NULL argument for mibp.
-     *
-     * The sysctlnametomib() function is also useful for fetching mib prefixes.
-     * If size on input is greater than the number of elements written, the
-     * array still contains the additional elements which may be written
-     * programmatically.
-     *
-     * @param name
-     *            ASCII representation of the name
-     * @param mibp
-     *            Integer array containing the corresponding name vector.
-     * @param size
-     *            On input, number of elements in the returned array; on output,
-     *            the number of entries copied.
-     * @return 0 on success; sets errno on failure
-     */
-    int sysctlnametomib(String name, Pointer mibp, IntByReference size);
+    class BsdUdpstat {
+        public int udps_ipackets; // 0
+        public int udps_hdrops; // 4
+        public int udps_badsum; // 8
+        public int udps_badlen; // 12
+        public int udps_opackets; // 36
+        public int udps_noportmcast; // 48
+        public int udps_rcv6_swcsum; // 64
+        public int udps_snd6_swcsum; // 89
+    }
 
-    /**
-     * The getloadavg() function returns the number of processes in the system
-     * run queue averaged over various periods of time. Up to nelem samples are
-     * retrieved and assigned to successive elements of loadavg[]. The system
-     * imposes a maximum of 3 samples, representing averages over the last 1, 5,
-     * and 15 minutes, respectively.
-     *
-     * @param loadavg
-     *            An array of doubles which will be filled with the results
-     * @param nelem
-     *            Number of samples to return
-     * @return If the load average was unobtainable, -1 is returned; otherwise,
-     *         the number of samples actually retrieved is returned.
-     * @see <A HREF=
-     *      "https://www.freebsd.org/cgi/man.cgi?query=getloadavg&sektion=3">
-     *      getloadavg(3)</A>
-     */
-    int getloadavg(double[] loadavg, int nelem);
+    class BsdIpstat {
+        public int ips_total; // 0
+        public int ips_badsum; // 4
+        public int ips_tooshort; // 8
+        public int ips_toosmall; // 12
+        public int ips_badhlen; // 16
+        public int ips_badlen; // 20
+        public int ips_delivered; // 56
+    }
+
+    class BsdIp6stat {
+        public long ip6s_total; // 0
+        public long ip6s_localout; // 88
+    }
 
     /**
      * Returns the process ID of the calling process. The ID is guaranteed to be
@@ -210,13 +136,12 @@ public interface CLibrary extends Library {
 
     /**
      * Given node and service, which identify an Internet host and a service,
-     * getaddrinfo() returns one or more addrinfo structures, each of which
-     * contains an Internet address that can be specified in a call to bind(2)
-     * or connect(2).
+     * getaddrinfo() returns one or more addrinfo structures, each of which contains
+     * an Internet address that can be specified in a call to bind(2) or connect(2).
      *
      * @param node
-     *            a numerical network address or a network hostname, whose
-     *            network addresses are looked up and resolved.
+     *            a numerical network address or a network hostname, whose network
+     *            addresses are looked up and resolved.
      * @param service
      *            sets the port in each returned address structure.
      * @param hints
@@ -229,8 +154,8 @@ public interface CLibrary extends Library {
     int getaddrinfo(String node, String service, Addrinfo hints, PointerByReference res);
 
     /**
-     * Frees the memory that was allocated for the dynamically allocated linked
-     * list res.
+     * Frees the memory that was allocated for the dynamically allocated linked list
+     * res.
      *
      * @param res
      *            Pointer to linked list returned by getaddrinfo
@@ -238,8 +163,8 @@ public interface CLibrary extends Library {
     void freeaddrinfo(Pointer res);
 
     /**
-     * Translates getaddrinfo error codes to a human readable string, suitable
-     * for error reporting.
+     * Translates getaddrinfo error codes to a human readable string, suitable for
+     * error reporting.
      *
      * @param e
      *            Error code from getaddrinfo
@@ -248,20 +173,14 @@ public interface CLibrary extends Library {
     String gai_strerror(int e);
 
     /**
-     * Places the contents of the symbolic link path in the buffer buf, which
-     * has size bufsiz.
-     *
-     * @param path
-     *            A symbolic link
-     * @param buf
-     *            Holds actual path to location pointed to by symlink
-     * @param bufsize
-     *            size of data in buffer
-     * @return readlink() places the contents of the symbolic link path in the
-     *         buffer buf, which has size bufsiz. readlink() does not append a
-     *         null byte to buf. It will truncate the contents (to a length of
-     *         bufsiz characters), in case the buffer is too small to hold all
-     *         of the contents.
+     * Rewinds the file pointer to the beginning of the utmp file. It is generally a
+     * good idea to call it before any of the other functions.
      */
-    int readlink(String path, Pointer buf, int bufsize);
+    void setutxent();
+
+    /**
+     * Closes the utmp file. It should be called when the user code is done
+     * accessing the file with the other functions.
+     */
+    void endutxent();
 }

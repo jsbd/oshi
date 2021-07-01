@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,96 +23,137 @@
  */
 package oshi.software.os.unix.freebsd;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import static oshi.software.os.OSService.State.RUNNING;
+import static oshi.software.os.OSService.State.STOPPED;
 
-import oshi.jna.platform.linux.Libc;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import oshi.annotation.concurrent.ThreadSafe;
+import oshi.driver.unix.freebsd.Who;
+import oshi.jna.platform.unix.freebsd.FreeBsdLibc;
+import oshi.jna.platform.unix.freebsd.FreeBsdLibc.Timeval;
 import oshi.software.common.AbstractOperatingSystem;
 import oshi.software.os.FileSystem;
+import oshi.software.os.InternetProtocolStats;
 import oshi.software.os.NetworkParams;
 import oshi.software.os.OSProcess;
+import oshi.software.os.OSService;
+import oshi.software.os.OSSession;
 import oshi.util.ExecutingCommand;
-import oshi.util.LsofUtil;
 import oshi.util.ParseUtil;
 import oshi.util.platform.unix.freebsd.BsdSysctlUtil;
+import oshi.util.tuples.Pair;
 
 /**
- * Linux is a family of free operating systems most commonly used on personal
- * computers.
- *
- * @author widdis[at]gmail[dot]com
+ * FreeBSD is a free and open-source Unix-like operating system descended from
+ * the Berkeley Software Distribution (BSD), which was based on Research Unix.
+ * The first version of FreeBSD was released in 1993. In 2005, FreeBSD was the
+ * most popular open-source BSD operating system, accounting for more than
+ * three-quarters of all installed simply, permissively licensed BSD systems.
  */
+@ThreadSafe
 public class FreeBsdOperatingSystem extends AbstractOperatingSystem {
-    private static final long serialVersionUID = 1L;
 
-    public FreeBsdOperatingSystem() {
-        this.manufacturer = "Unix/BSD";
-        this.family = BsdSysctlUtil.sysctl("kern.ostype", "FreeBSD");
-        this.version = new FreeBsdOSVersionInfoEx();
-        initBitness();
-    }
+    private static final Logger LOG = LoggerFactory.getLogger(FreeBsdOperatingSystem.class);
 
-    private void initBitness() {
-        if (this.bitness < 64 && ExecutingCommand.getFirstAnswer("uname -m").indexOf("64") != -1) {
-            this.bitness = 64;
-        }
-    }
+    private static final long BOOTTIME = querySystemBootTime();
 
-    /**
-     * {@inheritDoc}
+    /*
+     * Package-private for use by FreeBsdOSProcess
      */
+    static final List<String> PS_KEYWORDS =
+            Collections.unmodifiableList(
+                    Arrays.asList(
+                            "state", "pid", "ppid", "user", "uid", "group", "gid", "nlwp", "pri",
+                            "vsz", "rss", "etimes", "systime", "time", "comm", "majflt", "minflt",
+                            "nvcsw", "nivcsw", "args"));
+
+    static final String PS_KEYWORD_ARGS = String.join(",", PS_KEYWORDS);
+
+    @Override
+    public String queryManufacturer() {
+        return "Unix/BSD";
+    }
+
+    @Override
+    public Pair<String, OSVersionInfo> queryFamilyVersionInfo() {
+        String family = BsdSysctlUtil.sysctl("kern.ostype", "FreeBSD");
+
+        String version = BsdSysctlUtil.sysctl("kern.osrelease", "");
+        String versionInfo = BsdSysctlUtil.sysctl("kern.version", "");
+        String buildNumber = versionInfo.split(":")[0].replace(family, "").replace(version, "").trim();
+
+        return new Pair<>(family, new OSVersionInfo(version, null, buildNumber));
+    }
+
+    @Override
+    protected int queryBitness(int jvmBitness) {
+        if (jvmBitness < 64 && ExecutingCommand.getFirstAnswer("uname -m").indexOf("64") == -1) {
+            return jvmBitness;
+        }
+        return 64;
+    }
+
     @Override
     public FileSystem getFileSystem() {
         return new FreeBsdFileSystem();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public OSProcess[] getProcesses(int limit, ProcessSort sort, boolean slowFields) {
-        List<OSProcess> procs = getProcessListFromPS(
-                "ps -awwxo state,pid,ppid,user,uid,group,gid,nlwp,pri,vsz,rss,etimes,systime,time,comm,args", -1,
-                slowFields);
-        List<OSProcess> sorted = processSort(procs, limit, sort);
-        return sorted.toArray(new OSProcess[0]);
+    public InternetProtocolStats getInternetProtocolStats() {
+        return new FreeBsdInternetProtocolStats();
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
+    public List<OSSession> getSessions() {
+        return USE_WHO_COMMAND ? super.getSessions() : Who.queryUtxent();
+    }
+
+    @Override
+    public List<OSProcess> queryAllProcesses() {
+        return getProcessListFromPS(-1);
+    }
+
+    @Override
+    public List<OSProcess> queryChildProcesses(int parentPid) {
+        List<OSProcess> allProcs = queryAllProcesses();
+        Set<Integer> descendantPids = getChildrenOrDescendants(allProcs, parentPid, false);
+        return allProcs.stream().filter(p -> descendantPids.contains(p.getProcessID())).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<OSProcess> queryDescendantProcesses(int parentPid) {
+        List<OSProcess> allProcs = queryAllProcesses();
+        Set<Integer> descendantPids = getChildrenOrDescendants(allProcs, parentPid, true);
+        return allProcs.stream().filter(p -> descendantPids.contains(p.getProcessID())).collect(Collectors.toList());
+    }
+
     @Override
     public OSProcess getProcess(int pid) {
-        return getProcess(pid, true);
-    }
-
-    private OSProcess getProcess(int pid, boolean slowFields) {
-        List<OSProcess> procs = getProcessListFromPS(
-                "ps -awwxo state,pid,ppid,user,uid,group,gid,nlwp,pri,vsz,rss,etimes,systime,time,comm,args -p ", pid,
-                slowFields);
+        List<OSProcess> procs = getProcessListFromPS(pid);
         if (procs.isEmpty()) {
             return null;
         }
         return procs.get(0);
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public OSProcess[] getChildProcesses(int parentPid, int limit, ProcessSort sort) {
-        List<OSProcess> procs = getProcessListFromPS(
-                "ps -awwxo state,pid,ppid,user,uid,group,gid,nlwp,pri,vsz,rss,etimes,systime,time,comm,args --ppid",
-                parentPid, true);
-        List<OSProcess> sorted = processSort(procs, limit, sort);
-        return sorted.toArray(new OSProcess[0]);
-    }
-
-    private List<OSProcess> getProcessListFromPS(String psCommand, int pid, boolean slowFields) {
-        Map<Integer, String> cwdMap = LsofUtil.getCwdMap(pid);
+    private static List<OSProcess> getProcessListFromPS(int pid) {
         List<OSProcess> procs = new ArrayList<>();
-        List<String> procList = ExecutingCommand.runNative(psCommand + (pid < 0 ? "" : pid));
+        String psCommand = "ps -awwxo " + PS_KEYWORD_ARGS;
+        if (pid >= 0) {
+            psCommand += " -p " + pid;
+        }
+        List<String> procList = ExecutingCommand.runNative(psCommand);
         if (procList.isEmpty() || procList.size() < 2) {
             return procs;
         }
@@ -120,78 +161,20 @@ public class FreeBsdOperatingSystem extends AbstractOperatingSystem {
         procList.remove(0);
         // Fill list
         for (String proc : procList) {
-            String[] split = ParseUtil.whitespaces.split(proc.trim(), 16);
+            String[] split = ParseUtil.whitespaces.split(proc.trim(), PS_KEYWORDS.size());
             // Elements should match ps command order
-            if (split.length < 16) {
-                continue;
+            if (split.length == PS_KEYWORDS.size()) {
+                procs.add(new FreeBsdOSProcess(pid < 0 ? ParseUtil.parseIntOrDefault(split[1], 0) : pid, split));
             }
-            long now = System.currentTimeMillis();
-            OSProcess fproc = new OSProcess();
-            switch (split[0].charAt(0)) {
-            case 'R':
-                fproc.setState(OSProcess.State.RUNNING);
-                break;
-            case 'I':
-            case 'S':
-                fproc.setState(OSProcess.State.SLEEPING);
-                break;
-            case 'D':
-            case 'L':
-            case 'U':
-                fproc.setState(OSProcess.State.WAITING);
-                break;
-            case 'Z':
-                fproc.setState(OSProcess.State.ZOMBIE);
-                break;
-            case 'T':
-                fproc.setState(OSProcess.State.STOPPED);
-                break;
-            default:
-                fproc.setState(OSProcess.State.OTHER);
-                break;
-            }
-            fproc.setProcessID(ParseUtil.parseIntOrDefault(split[1], 0));
-            fproc.setParentProcessID(ParseUtil.parseIntOrDefault(split[2], 0));
-            fproc.setUser(split[3]);
-            fproc.setUserID(split[4]);
-            fproc.setGroup(split[5]);
-            fproc.setGroupID(split[6]);
-            fproc.setThreadCount(ParseUtil.parseIntOrDefault(split[7], 0));
-            fproc.setPriority(ParseUtil.parseIntOrDefault(split[8], 0));
-            // These are in KB, multiply
-            fproc.setVirtualSize(ParseUtil.parseLongOrDefault(split[9], 0) * 1024);
-            fproc.setResidentSetSize(ParseUtil.parseLongOrDefault(split[10], 0) * 1024);
-            // Avoid divide by zero for processes up less than a second
-            long elapsedTime = ParseUtil.parseDHMSOrDefault(split[11], 0L);
-            fproc.setUpTime(elapsedTime < 1L ? 1L : elapsedTime);
-            fproc.setStartTime(now - fproc.getUpTime());
-            fproc.setKernelTime(ParseUtil.parseDHMSOrDefault(split[12], 0L));
-            fproc.setUserTime(ParseUtil.parseDHMSOrDefault(split[13], 0L) - fproc.getKernelTime());
-            fproc.setPath(split[14]);
-            fproc.setName(fproc.getPath().substring(fproc.getPath().lastIndexOf('/') + 1));
-            fproc.setCommandLine(split[15]);
-            fproc.setCurrentWorkingDirectory(cwdMap.getOrDefault(fproc.getProcessID(), ""));
-            // gets the open files count -- slow
-            if (slowFields) {
-                List<String> openFilesList = ExecutingCommand.runNative(String.format("lsof -p %d", pid));
-                fproc.setOpenFiles(openFilesList.size() - 1L);
-            }
-            procs.add(fproc);
         }
         return procs;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public int getProcessId() {
-        return Libc.INSTANCE.getpid();
+        return FreeBsdLibc.INSTANCE.getpid();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public int getProcessCount() {
         List<String> procList = ExecutingCommand.runNative("ps -axo pid");
@@ -202,9 +185,6 @@ public class FreeBsdOperatingSystem extends AbstractOperatingSystem {
         return 0;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public int getThreadCount() {
         int threads = 0;
@@ -214,12 +194,59 @@ public class FreeBsdOperatingSystem extends AbstractOperatingSystem {
         return threads;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
+    public long getSystemUptime() {
+        return System.currentTimeMillis() / 1000 - BOOTTIME;
+    }
+
+    @Override
+    public long getSystemBootTime() {
+        return BOOTTIME;
+    }
+
+    private static long querySystemBootTime() {
+        Timeval tv = new Timeval();
+        if (!BsdSysctlUtil.sysctl("kern.boottime", tv) || tv.tv_sec == 0) {
+            // Usually this works. If it doesn't, fall back to text parsing.
+            // Boot time will be the first consecutive string of digits.
+            return ParseUtil.parseLongOrDefault(
+                    ExecutingCommand.getFirstAnswer("sysctl -n kern.boottime").split(",")[0].replaceAll("\\D", ""),
+                    System.currentTimeMillis() / 1000);
+        }
+        // tv now points to a 128-bit timeval structure for boot time.
+        // First 8 bytes are seconds, second 8 bytes are microseconds (we ignore)
+        return tv.tv_sec;
+    }
+
     @Override
     public NetworkParams getNetworkParams() {
         return new FreeBsdNetworkParams();
     }
 
+    @Override
+    public OSService[] getServices() {
+        // Get running services
+        List<OSService> services = new ArrayList<>();
+        Set<String> running = new HashSet<>();
+        for (OSProcess p : getChildProcesses(1, ProcessFiltering.ALL_PROCESSES, ProcessSorting.PID_ASC, 0)) {
+            OSService s = new OSService(p.getName(), p.getProcessID(), RUNNING);
+            services.add(s);
+            running.add(p.getName());
+        }
+        // Get Directories for stopped services
+        File dir = new File("/etc/rc.d");
+        File[] listFiles;
+        if (dir.exists() && dir.isDirectory() && (listFiles = dir.listFiles()) != null) {
+            for (File f : listFiles) {
+                String name = f.getName();
+                if (!running.contains(name)) {
+                    OSService s = new OSService(name, 0, STOPPED);
+                    services.add(s);
+                }
+            }
+        } else {
+            LOG.error("Directory: /etc/init does not exist");
+        }
+        return services.toArray(new OSService[0]);
+    }
 }

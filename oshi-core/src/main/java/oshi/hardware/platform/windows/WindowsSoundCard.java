@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -31,32 +31,45 @@ import com.sun.jna.platform.win32.Win32Exception;
 import com.sun.jna.platform.win32.WinError;
 import com.sun.jna.platform.win32.WinReg;
 
+import oshi.annotation.concurrent.Immutable;
+import oshi.hardware.SoundCard;
 import oshi.hardware.common.AbstractSoundCard;
 
 /**
  * Sound Card data obtained from registry
  */
-public class WindowsSoundCard extends AbstractSoundCard {
+@Immutable
+final class WindowsSoundCard extends AbstractSoundCard {
 
     private static final String REGISTRY_SOUNDCARDS = "SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e96c-e325-11ce-bfc1-08002be10318}\\";
 
-    public WindowsSoundCard(String kernelVersion, String name, String codec) {
+    /**
+     * Constructor for WindowsSoundCard.
+     *
+     * @param kernelVersion
+     *            The version
+     * @param name
+     *            The name
+     * @param codec
+     *            The codec
+     */
+    WindowsSoundCard(String kernelVersion, String name, String codec) {
         super(kernelVersion, name, codec);
     }
 
     /**
-     * Returns Windows audio device driver information, which represents the
-     * closest proxy we have to sound cards.
+     * Returns Windows audio device driver information, which represents the closest
+     * proxy we have to sound cards.
      * <p>
      * NOTE : The reason why the codec name is same as the card name is because
-     * windows does not provide the name of the codec chip but sometimes the
-     * name of the card returned is infact the name of the codec chip also.
-     * Example : Realtek ALC887 HD Audio Device
+     * windows does not provide the name of the codec chip but sometimes the name of
+     * the card returned is infact the name of the codec chip also. Example :
+     * Realtek ALC887 HD Audio Device
      *
      * @return List of sound cards
      */
-    public static List<WindowsSoundCard> getSoundCards() {
-        List<WindowsSoundCard> soundCards = new ArrayList<>();
+    public static List<SoundCard> getSoundCards() {
+        List<SoundCard> soundCards = new ArrayList<>();
         String[] keys = Advapi32Util.registryGetKeys(WinReg.HKEY_LOCAL_MACHINE, REGISTRY_SOUNDCARDS);
         for (String key : keys) {
             String fullKey = REGISTRY_SOUNDCARDS + key;

@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,57 +23,54 @@
  */
 package oshi.hardware.platform.unix.freebsd;
 
-import com.sun.jna.Memory;
+import com.sun.jna.Memory; // NOSONAR squid:S1191
 import com.sun.jna.Pointer;
-import com.sun.jna.ptr.IntByReference;
+import com.sun.jna.platform.unix.LibCAPI.size_t;
 
-import oshi.hardware.Sensors;
-import oshi.jna.platform.unix.freebsd.Libc;
+import oshi.annotation.concurrent.ThreadSafe;
+import oshi.hardware.common.AbstractSensors;
+import oshi.jna.platform.unix.NativeSizeTByReference;
+import oshi.jna.platform.unix.freebsd.FreeBsdLibc;
 
-public class FreeBsdSensors implements Sensors {
+/**
+ * Sensors from coretemp
+ */
+@ThreadSafe
+final class FreeBsdSensors extends AbstractSensors {
 
-    private static final long serialVersionUID = 1L;
-
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public double getCpuTemperature() {
-        // Try with kldload coretemp
-        double sumTemp = 0d;
-        int cpu = 0;
+    public double queryCpuTemperature() {
+        return queryKldloadCoretemp();
+    }
+
+    /*
+     * If user has loaded coretemp module via kldload coretemp, sysctl call will
+     * return temperature
+     *
+     * @return Tempurature if successful, otherwise NaN
+     */
+    private static double queryKldloadCoretemp() {
         String name = "dev.cpu.%d.temperature";
-        while (true) {
-            IntByReference size = new IntByReference(Libc.INT_SIZE);
-            Pointer p = new Memory(size.getValue());
-            if (0 != Libc.INSTANCE.sysctlbyname(String.format(name, cpu), p, size, null, 0)) {
-                break;
-            }
+        NativeSizeTByReference size = new NativeSizeTByReference(new size_t(FreeBsdLibc.INT_SIZE));
+        Pointer p = new Memory(size.getValue().longValue());
+        int cpu = 0;
+        double sumTemp = 0d;
+        while (0 == FreeBsdLibc.INSTANCE.sysctlbyname(String.format(name, cpu), p, size, null, size_t.ZERO)) {
             sumTemp += p.getInt(0) / 10d - 273.15;
             cpu++;
         }
-        if (cpu > 0) {
-            return sumTemp / cpu;
-        }
-        // TODO try other ways here
-        return 0d;
+        return cpu > 0 ? sumTemp / cpu : Double.NaN;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public int[] getFanSpeeds() {
-        // TODO try common software
+    public int[] queryFanSpeeds() {
+        // Nothing known on FreeBSD for this.
         return new int[0];
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public double getCpuVoltage() {
-        // TODO try common software
+    public double queryCpuVoltage() {
+        // Nothing known on FreeBSD for this.
         return 0d;
     }
 }

@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,28 +23,40 @@
  */
 package oshi.hardware;
 
-import static org.junit.Assert.assertTrue;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.both;
+import static org.hamcrest.Matchers.either;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+import static org.hamcrest.Matchers.notANumber;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import oshi.SystemInfo;
 
 /**
  * Test Sensors
  */
-public class SensorsTest {
+class SensorsTest {
+    private SystemInfo si = new SystemInfo();
+    private Sensors s = si.getHardware().getSensors();
+
     /**
      * Test sensors
      */
     @Test
-    public void testSensors() {
-        SystemInfo si = new SystemInfo();
-        Sensors s = si.getHardware().getSensors();
-        assertTrue(s.getCpuTemperature() >= 0d && s.getCpuTemperature() <= 100d);
+    void testSensors() {
+        assertThat("CPU Temperature should be NaN or between 0 and 100", s.getCpuTemperature(),
+                either(notANumber()).or(both(greaterThanOrEqualTo(0d)).and(lessThanOrEqualTo(100d))));
+        assertThat("CPU voltage shouldn't be negative", s.getCpuVoltage(), is(greaterThanOrEqualTo(0d)));
+    }
+
+    @Test
+    void testFanSpeeds() {
         int[] speeds = s.getFanSpeeds();
         for (int speed : speeds) {
-            assertTrue(speed >= 0);
+            assertThat("Fan Speed shouldn't be negative", speed, is(greaterThanOrEqualTo(0)));
         }
-        assertTrue(s.getCpuVoltage() >= 0);
     }
 }

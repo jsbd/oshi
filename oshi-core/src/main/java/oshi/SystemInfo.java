@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,127 +23,173 @@
  */
 package oshi;
 
-import java.io.Serializable;
+import static oshi.PlatformEnum.AIX;
+import static oshi.PlatformEnum.FREEBSD;
+import static oshi.PlatformEnum.LINUX;
+import static oshi.PlatformEnum.MACOS;
+import static oshi.PlatformEnum.MACOSX;
+import static oshi.PlatformEnum.OPENBSD;
+import static oshi.PlatformEnum.SOLARIS;
+import static oshi.PlatformEnum.UNKNOWN;
+import static oshi.PlatformEnum.WINDOWS;
+import static oshi.util.Memoizer.memoize;
 
-import com.sun.jna.Platform;
+import java.util.function.Supplier;
+
+import com.sun.jna.Platform; // NOSONAR squid:S1191
 
 import oshi.hardware.HardwareAbstractionLayer;
 import oshi.hardware.platform.linux.LinuxHardwareAbstractionLayer;
 import oshi.hardware.platform.mac.MacHardwareAbstractionLayer;
+import oshi.hardware.platform.unix.aix.AixHardwareAbstractionLayer;
 import oshi.hardware.platform.unix.freebsd.FreeBsdHardwareAbstractionLayer;
+import oshi.hardware.platform.unix.openbsd.OpenBsdHardwareAbstractionLayer;
 import oshi.hardware.platform.unix.solaris.SolarisHardwareAbstractionLayer;
 import oshi.hardware.platform.windows.WindowsHardwareAbstractionLayer;
 import oshi.software.os.OperatingSystem;
 import oshi.software.os.linux.LinuxOperatingSystem;
 import oshi.software.os.mac.MacOperatingSystem;
+import oshi.software.os.unix.aix.AixOperatingSystem;
 import oshi.software.os.unix.freebsd.FreeBsdOperatingSystem;
+import oshi.software.os.unix.openbsd.OpenBsdOperatingSystem;
 import oshi.software.os.unix.solaris.SolarisOperatingSystem;
 import oshi.software.os.windows.WindowsOperatingSystem;
 
 /**
- * System information. This is the main entry point to Oshi. This object
- * provides getters which instantiate the appropriate platform-specific
- * implementations of {@link OperatingSystem} (software) and
- * {@link HardwareAbstractionLayer} (hardware).
- *
- * @author dblock[at]dblock[dot]org
+ * System information. This is the main entry point to OSHI.
+ * <p>
+ * This object provides getters which instantiate the appropriate
+ * platform-specific implementations of {@link oshi.software.os.OperatingSystem}
+ * (software) and {@link oshi.hardware.HardwareAbstractionLayer} (hardware).
  */
-public class SystemInfo implements Serializable {
-
-    private static final long serialVersionUID = 1L;
-
-    private OperatingSystem os = null;
-
-    private HardwareAbstractionLayer hardware = null;
+public class SystemInfo {
 
     // The platform isn't going to change, and making this static enables easy
     // access from outside this class
-    private static final PlatformEnum currentPlatformEnum;
+    private static final PlatformEnum currentPlatform;
 
     static {
         if (Platform.isWindows()) {
-            currentPlatformEnum = PlatformEnum.WINDOWS;
+            currentPlatform = WINDOWS;
         } else if (Platform.isLinux()) {
-            currentPlatformEnum = PlatformEnum.LINUX;
+            currentPlatform = LINUX;
         } else if (Platform.isMac()) {
-            currentPlatformEnum = PlatformEnum.MACOSX;
+            currentPlatform = MACOS;
         } else if (Platform.isSolaris()) {
-            currentPlatformEnum = PlatformEnum.SOLARIS;
+            currentPlatform = SOLARIS;
         } else if (Platform.isFreeBSD()) {
-            currentPlatformEnum = PlatformEnum.FREEBSD;
+            currentPlatform = FREEBSD;
+        } else if (Platform.isAIX()) {
+            currentPlatform = AIX;
+        } else if (Platform.isOpenBSD()) {
+            currentPlatform = OPENBSD;
         } else {
-            currentPlatformEnum = PlatformEnum.UNKNOWN;
+            currentPlatform = UNKNOWN;
+        }
+    }
+
+    private static final String NOT_SUPPORTED = "Operating system not supported: JNA Platform type ";
+
+    private final Supplier<OperatingSystem> os = memoize(SystemInfo::createOperatingSystem);
+
+    private final Supplier<HardwareAbstractionLayer> hardware = memoize(SystemInfo::createHardware);
+
+    /**
+     * Create a new instance of {@link SystemInfo}. This is the main entry point to
+     * OSHI and provides access to cross-platform code.
+     * <p>
+     * Platform-specific Hardware and Software objects are retrieved via memoized
+     * suppliers. To conserve memory at the cost of additional processing time,
+     * create a new version of SystemInfo() for subsequent calls. To conserve
+     * processing time at the cost of additional memory usage, re-use the same
+     * {@link SystemInfo} object for future queries.
+     */
+    public SystemInfo() {
+        if (getCurrentPlatform().equals(PlatformEnum.UNKNOWN)) {
+            throw new UnsupportedOperationException(NOT_SUPPORTED + Platform.getOSType());
         }
     }
 
     /**
-     * @return Returns the currentPlatformEnum.
+     * Gets the {@link PlatformEnum} value representing this system.
+     *
+     * @return Returns the current platform
      */
+    public static PlatformEnum getCurrentPlatform() {
+        return currentPlatform;
+    }
+
+    /**
+     * Gets the {@link PlatformEnum} value representing this system.
+     *
+     * @return Returns the current platform
+     * @deprecated Use {@link #getCurrentPlatform()}
+     */
+    @Deprecated
     public static PlatformEnum getCurrentPlatformEnum() {
-        return currentPlatformEnum;
+        PlatformEnum platform = getCurrentPlatform();
+        return platform.equals(MACOS) ? MACOSX : platform;
     }
 
     /**
      * Creates a new instance of the appropriate platform-specific
-     * {@link OperatingSystem}.
+     * {@link oshi.software.os.OperatingSystem}.
      *
-     * @return A new instance of {@link OperatingSystem}.
+     * @return A new instance of {@link oshi.software.os.OperatingSystem}.
      */
     public OperatingSystem getOperatingSystem() {
-        if (this.os == null) {
-            switch (currentPlatformEnum) {
+        return os.get();
+    }
 
-            case WINDOWS:
-                this.os = new WindowsOperatingSystem();
-                break;
-            case LINUX:
-                this.os = new LinuxOperatingSystem();
-                break;
-            case MACOSX:
-                this.os = new MacOperatingSystem();
-                break;
-            case SOLARIS:
-                this.os = new SolarisOperatingSystem();
-                break;
-            case FREEBSD:
-                this.os = new FreeBsdOperatingSystem();
-                break;
-            default:
-                throw new UnsupportedOperationException("Operating system not supported: " + Platform.getOSType());
-            }
+    private static OperatingSystem createOperatingSystem() {
+        switch (currentPlatform) {
+        case WINDOWS:
+            return new WindowsOperatingSystem();
+        case LINUX:
+            return new LinuxOperatingSystem();
+        case MACOS:
+            return new MacOperatingSystem();
+        case SOLARIS:
+            return new SolarisOperatingSystem();
+        case FREEBSD:
+            return new FreeBsdOperatingSystem();
+        case AIX:
+            return new AixOperatingSystem();
+        case OPENBSD:
+            return new OpenBsdOperatingSystem();
+        default:
+            return null;
         }
-        return this.os;
     }
 
     /**
      * Creates a new instance of the appropriate platform-specific
-     * {@link HardwareAbstractionLayer}.
+     * {@link oshi.hardware.HardwareAbstractionLayer}.
      *
-     * @return A new instance of {@link HardwareAbstractionLayer}.
+     * @return A new instance of {@link oshi.hardware.HardwareAbstractionLayer}.
      */
     public HardwareAbstractionLayer getHardware() {
-        if (this.hardware == null) {
-            switch (currentPlatformEnum) {
+        return hardware.get();
+    }
 
-            case WINDOWS:
-                this.hardware = new WindowsHardwareAbstractionLayer();
-                break;
-            case LINUX:
-                this.hardware = new LinuxHardwareAbstractionLayer();
-                break;
-            case MACOSX:
-                this.hardware = new MacHardwareAbstractionLayer();
-                break;
-            case SOLARIS:
-                this.hardware = new SolarisHardwareAbstractionLayer();
-                break;
-            case FREEBSD:
-                this.hardware = new FreeBsdHardwareAbstractionLayer();
-                break;
-            default:
-                throw new UnsupportedOperationException("Operating system not supported: " + Platform.getOSType());
-            }
+    private static HardwareAbstractionLayer createHardware() {
+        switch (currentPlatform) {
+        case WINDOWS:
+            return new WindowsHardwareAbstractionLayer();
+        case LINUX:
+            return new LinuxHardwareAbstractionLayer();
+        case MACOS:
+            return new MacHardwareAbstractionLayer();
+        case SOLARIS:
+            return new SolarisHardwareAbstractionLayer();
+        case FREEBSD:
+            return new FreeBsdHardwareAbstractionLayer();
+        case AIX:
+            return new AixHardwareAbstractionLayer();
+        case OPENBSD:
+            return new OpenBsdHardwareAbstractionLayer();
+        default:
+            return null;
         }
-        return this.hardware;
     }
 }

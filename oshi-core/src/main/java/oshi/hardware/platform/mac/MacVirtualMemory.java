@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,6 +23,11 @@
  */
 package oshi.hardware.platform.mac;
 
+import static oshi.util.Memoizer.defaultExpiration;
+import static oshi.util.Memoizer.memoize;
+
+import java.util.function.Supplier;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,80 +37,88 @@ import com.sun.jna.platform.mac.SystemB.VMStatistics;
 import com.sun.jna.platform.mac.SystemB.XswUsage;
 import com.sun.jna.ptr.IntByReference;
 
+import oshi.annotation.concurrent.ThreadSafe;
 import oshi.hardware.common.AbstractVirtualMemory;
 import oshi.util.ParseUtil;
 import oshi.util.platform.mac.SysctlUtil;
+import oshi.util.tuples.Pair;
 
 /**
  * Memory obtained by host_statistics (vm_stat) and sysctl.
  */
-public class MacVirtualMemory extends AbstractVirtualMemory {
-
-    private static final long serialVersionUID = 1L;
+@ThreadSafe
+final class MacVirtualMemory extends AbstractVirtualMemory {
 
     private static final Logger LOG = LoggerFactory.getLogger(MacVirtualMemory.class);
 
+    private final MacGlobalMemory global;
+
+    private final Supplier<Pair<Long, Long>> usedTotal = memoize(MacVirtualMemory::querySwapUsage, defaultExpiration());
+
+    private final Supplier<Pair<Long, Long>> inOut = memoize(MacVirtualMemory::queryVmStat, defaultExpiration());
+
     /**
-     * {@inheritDoc}
+     * Constructor for MacVirtualMemory.
+     *
+     * @param macGlobalMemory
+     *            The parent global memory class instantiating this
      */
+    MacVirtualMemory(MacGlobalMemory macGlobalMemory) {
+        this.global = macGlobalMemory;
+    }
+
     @Override
     public long getSwapUsed() {
-        if (this.swapUsed < 0) {
-            updateSwapUsed();
-        }
-        return this.swapUsed;
+        return usedTotal.get().getA();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public long getSwapTotal() {
-        if (this.swapTotal < 0) {
-            updateSwapUsed();
-        }
-        return this.swapTotal;
+        return usedTotal.get().getB();
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
+    public long getVirtualMax() {
+        return this.global.getTotal() + getSwapTotal();
+    }
+
+    @Override
+    public long getVirtualInUse() {
+        return this.global.getTotal() - this.global.getAvailable() + getSwapUsed();
+    }
+
     @Override
     public long getSwapPagesIn() {
-        if (this.swapPagesIn < 0) {
-            updateSwapInOut();
-        }
-        return this.swapPagesIn;
+        return inOut.get().getA();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public long getSwapPagesOut() {
-        if (this.swapPagesOut < 0) {
-            updateSwapInOut();
-        }
-        return this.swapPagesOut;
+        return inOut.get().getB();
     }
 
-    private void updateSwapUsed() {
+    private static Pair<Long, Long> querySwapUsage() {
+        long swapUsed = 0L;
+        long swapTotal = 0L;
         XswUsage xswUsage = new XswUsage();
-        if (!SysctlUtil.sysctl("vm.swapusage", xswUsage)) {
-            return;
+        if (SysctlUtil.sysctl("vm.swapusage", xswUsage)) {
+            swapUsed = xswUsage.xsu_used;
+            swapTotal = xswUsage.xsu_total;
         }
-        this.swapUsed = xswUsage.xsu_used;
-        this.swapTotal = xswUsage.xsu_total;
+        return new Pair<>(swapUsed, swapTotal);
     }
 
-    private void updateSwapInOut() {
+    private static Pair<Long, Long> queryVmStat() {
+        long swapPagesIn = 0L;
+        long swapPagesOut = 0L;
         VMStatistics vmStats = new VMStatistics();
-        if (0 != SystemB.INSTANCE.host_statistics(SystemB.INSTANCE.mach_host_self(), SystemB.HOST_VM_INFO, vmStats,
+        if (0 == SystemB.INSTANCE.host_statistics(SystemB.INSTANCE.mach_host_self(), SystemB.HOST_VM_INFO, vmStats,
                 new IntByReference(vmStats.size() / SystemB.INT_SIZE))) {
+            swapPagesIn = ParseUtil.unsignedIntToLong(vmStats.pageins);
+            swapPagesOut = ParseUtil.unsignedIntToLong(vmStats.pageouts);
+        } else {
             LOG.error("Failed to get host VM info. Error code: {}", Native.getLastError());
-            return;
         }
-        this.swapPagesIn = ParseUtil.unsignedIntToLong(vmStats.pageins);
-        this.swapPagesOut = ParseUtil.unsignedIntToLong(vmStats.pageouts);
+        return new Pair<>(swapPagesIn, swapPagesOut);
     }
 }

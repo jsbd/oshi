@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,28 +23,38 @@
  */
 package oshi.hardware;
 
-import static org.junit.Assert.assertTrue;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.closeTo;
+import static org.hamcrest.Matchers.either;
+import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.is;
 
-import org.junit.Test;
+import java.util.List;
+
+import org.junit.jupiter.api.Test;
 
 import oshi.SystemInfo;
 
 /**
  * Test Power Source
  */
-public class PowerSourceTest {
+class PowerSourceTest {
     /**
      * Test power source.
      */
     @Test
-    public void testPowerSource() {
+    void testPowerSource() {
         SystemInfo si = new SystemInfo();
-        PowerSource[] psArr = si.getHardware().getPowerSources();
+        List<PowerSource> psArr = si.getHardware().getPowerSources();
         for (PowerSource ps : psArr) {
-            assertTrue(ps.getRemainingCapacity() >= 0);
+            assertThat("Power Source's remaining capacity shouldn't be negative", ps.getRemainingCapacityPercent(),
+                    is(greaterThanOrEqualTo(0d)));
             double epsilon = 1E-6;
-            assertTrue(ps.getTimeRemaining() > 0 || Math.abs(ps.getTimeRemaining() - -1) < epsilon
-                    || Math.abs(ps.getTimeRemaining() - -2) < epsilon);
+            assertThat(
+                    "Power Source's estimated remaining time should be greater than zero or within error margin of -1 or within error margin of -2",
+                    ps.getTimeRemainingEstimated(),
+                    is(either(greaterThan(0d)).or(closeTo(-1d, epsilon)).or(closeTo(-2d, epsilon))));
         }
     }
 }

@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,38 +23,48 @@
  */
 package oshi.software.os;
 
-import java.io.Serializable;
+import oshi.annotation.concurrent.ThreadSafe;
 
 /**
  * NetworkParams presents network parameters of running OS, such as DNS, host
  * name etc.
  */
-public interface NetworkParams extends Serializable {
+@ThreadSafe
+public interface NetworkParams {
 
     /**
-     * @return Gets host name
+     * Gets the HostName of the machine executing OSHI.
+     *
+     * @return the hostname
      */
     String getHostName();
 
     /**
-     * @return Gets domain name
+     * Gets the Domain Name of the machine executing OSHI.
+     *
+     * @return the domain name
      */
     String getDomainName();
 
     /**
-     * @return Gets DNS servers
+     * Gets the DNS Servers configured for this machine.
+     *
+     * @return the DNS servers
      */
     String[] getDnsServers();
 
     /**
-     * @return Gets default gateway(routing destination for 0.0.0.0/0) for IPv4,
-     *         empty string if not defined.
+     * Gets the default gateway(routing destination for 0.0.0.0/0) for IPv4
+     * connections.
+     *
+     * @return default gateway for IPv4, or empty string if not defined.
      */
     String getIpv4DefaultGateway();
 
     /**
-     * @return Gets default gateway(routing destination for ::/0) for IPv6,
-     *         empty string if not defined.
+     * Gets default gateway(routing destination for ::/0) for IPv6 connections.
+     *
+     * @return default gateway for IPv6, or empty string if not defined.
      */
     String getIpv6DefaultGateway();
 }

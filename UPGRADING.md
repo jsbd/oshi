@@ -1,29 +1,70 @@
+# Guide to upgrading from OSHI 4.x to 5.x
+
+OSHI 5.0.0-5.1.2 releases are functionally equivalent to 4.7.0-4.8.2 releases,
+with three categories of changes supporting full thread safety:
+* Remove setters from API.
+* Change getters which return arrays of objects to return unmodifiable lists.
+* Remove deprecated code.
+
+For users of JPMS, OSHI 5.2.0 and 4.9.0 were released with an Automatic Module Name of `com.github.oshi`,
+which may differ from the `oshi.core` module name previously resolved automatically.
+
+## API Changes
+
+### Setter removal
+
+The `NetworkIF`, `HWDiskStore`, `OSFileStore`, and `OSProcess` classes are now interfaces, with setters removed.
+
+The `HWPartition` class is now immutable, with setters removed.
+
+### UnmodifiableList return types
+
+The `HardwareAbstractionLayer` methods `getNetworkIFs()`, `getDisks()`, `getPowerSources()`,
+`getDisplays()`, `getSoundCards()`, `getGraphicsCards()`, `getUsbDevices()`,
+the `HWDiskstore` method `getPartitions()`, the `FileSystem` method `getFileStores()`,
+the `GlobalMemory` method `getPhysicalMemory()`, the `OperatingSystem` methods for `getProcesses()`,
+the `CentralProcessor` method `getLogicalProcessors()`, and the `UsbDevice` method `getConnectedDevices()`
+now return an `UnmodifiableList` instead of an array.
+
+### Method changes
+
+The `OperatingSystem` methods fetching `OSProcess` information using a `slowFields` boolean have been removed,
+as the behavior they enabled is now done by default. Windows users should note the addition of a configurable
+parameter optionally allowing WMI caching for improved performance of `OsProcess#getCommandLine`.
+
+The `OperatingSystem` method `getProcessAffinityMask()` is now on the `OSProcess` object as `getAffinityMask()`.
+
+The `OSFileStore` method `updateAtrributes()` is now spelled correctly as `updateAttributes()`.
+
+### Deprecated method removal
+
+The deprecated `OperatingSystemVersion` interface and its getter `OperatingSystem`.`getVersion` were removed.
+Its `getVersion()`, `getCodeName()`, and `getBuildNumber()` methods are available on the object returned
+from the method `getVersionInfo()`.
+
+The deprecated `CentralProcessor` methods `getVendor()`, `getName()`, `getFamily()`, `getModel()`,
+`getStepping()`, `getProcessor()`, `getIdentifier()`, `getVendorFreq()`, and `isCpu64bit` were removed.
+The equivalent methods are available on the object returned from `getProcessorIdentifier()`.
+
+The deprecated `PowerSource` methods `getRemainingCapacity()` and `getTimeRemaining()` were removed,
+replaced by `getRemainingCapacityPercent()` and `getTimeRemainingEstimated()`.
+
+The deprecated `OSProcess` method `calculateCpuPercent()` was removed, replaced by `getProcessCpuLoadCumulative()`.
 
 # Guide to upgrading from OSHI 3.x to 4.x
 
 OSHI 4.0 requires minimum Java 8 compatibility.
 
-The `oshi-json` artifact has been completely removed. It is trivial to obtain
-JSON output using [Jackson's ObjectMapper](http://www.mkyong.com/java/
-jackson-2-convert-java-object-to-from-json/).
+The `oshi-json` artifact has been completely removed. It is trivial to obtain JSON output using the
+[Jackson ObjectMapper](https://www.mkyong.com/java/jackson-2-convert-java-object-to-from-json/).
 
 There is a new `oshi-demo` artifact which will contain many "how to" classes
-to demonstrate OSHI's capabilities and integration with other libraries.
+to demonstrate OSHI's capabilities and integration with other libraries. These classes are intended
+as proof-of-concept only, and are not intended for production use.
 
 ## API Changes
 
-Several changes in the API highlight which attributes do not change and which
-fetch dynamic information, as well as highlight operations with latency or
-expensive computations.  In general the following rules are followed:
- - getX() (and isX() for boolean) are lazy getters for the initial data
-query, and will store the value in an attribute, returning that same value on
-subsequent calls.  When relevant, an updateAtrributes() method will be 
-available to cause the getters to return updated values.
- - queryX() will get the latest value and typically identify more expensive
- (in cpu or time) methods.
-
-The following getX() methods are now queryX():
- - NetworkIF: getNetworkInterface() -> queryNetworkInterface() to prevent
+`NetworkIF#getNetworkInterface()` is now `queryNetworkInterface()` to prevent
 Jackson's ObjectMapper from attempting to serialize the returned object.
 
 There is a new `VirtualMemory `class which is accessible with a getter from 
@@ -34,11 +75,17 @@ The `CentralProcessor` setters were removed from the API. The methods
 `getSystemCpuLoadBetweenTicks()` and `getProcessorCpuLoadBetweenTicks()` now take
 an argument with the previous set of ticks, rather than internally saving the
 previous call. This enables users to measure over a longer period or multiple
-different periods.  The `getSystemCpuLoad()` method is now a direct passthrough
-to the `OperatingSystemMXBean` method if running an Oracle JVM, otherwise it
-returns a negative value.  The no-argument `getSystemLoadAverage()` has been 
+different periods.  The `getSystemCpuLoad()` method has been removed; users
+running the Oracle JVM should use the  `OperatingSystemMXBean` method if 
+they desire this value.  The no-argument `getSystemLoadAverage()` has been 
 removed; users can call with an argument of 1 to obtain the same value. 
 
+The `getSystemUptime()` method was moved from the `CentralProcessor` class to
+the `OperatingSystem` class.
+
+The `NetworkIF#updateNetworkStats()` and `HWDiskStore#updateDiskStats()` methods
+were renamed to `updateAttributes()` to conform to other similarly named methods
+to permit update of individual elements of arrays.
 
 # Guide to upgrading from OSHI 2.x to 3.x
 

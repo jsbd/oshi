@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,39 +23,63 @@
  */
 package oshi.util;
 
-import static org.junit.Assert.assertEquals;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.aMapWithSize;
+import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.emptyString;
+import static org.hamcrest.Matchers.hasEntry;
+import static org.hamcrest.Matchers.is;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Properties;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 /**
  * Tests FileUtil
  */
-public class FileUtilTest {
+class FileUtilTest {
 
     /*
      * File sources
      */
-    private static String THISCLASS = "src/test/java/oshi/util/FileUtilTest.java";
-    private static String INT_FILE = "src/test/resources/test.integer.txt";
-    private static String STRING_FILE = "src/test/resources/test.string.txt";
-    private static String PROCIO_FILE = "src/test/resources/test.procio.txt";
-    private static String NO_FILE = "does/not/exist";
+    private static final String PROJECTROOT;
+    static {
+        String root;
+        try {
+            File core = new File("oshi-core");
+            if (core.exists()) {
+                // If we're in main project directory get path to oshi-core
+                root = core.getCanonicalPath();
+            } else {
+                // Assume we must be in oshi-core
+                root = new File(".").getCanonicalPath();
+            }
+        } catch (IOException e) {
+            throw new ExceptionInInitializerError(e.getMessage());
+        }
+        PROJECTROOT = root;
+    }
+    private static final String THISCLASS = PROJECTROOT + "/src/test/java/oshi/util/FileUtilTest.java";
+    private static final String INT_FILE = PROJECTROOT + "/src/test/resources/test.integer.txt";
+    private static final String STRING_FILE = PROJECTROOT + "/src/test/resources/test.string.txt";
+    private static final String PROCIO_FILE = PROJECTROOT + "/src/test/resources/test.procio.txt";
+    private static final String NO_FILE = PROJECTROOT + "/does/not/exist";
 
     /**
      * Test read file.
      */
     @Test
-    public void testReadFile() {
-        List<String> thisFile = null;
+    void testReadFile() {
         // Try file not found
-        thisFile = FileUtil.readFile(NO_FILE);
-        assertEquals(0, thisFile.size());
+        assertThat("no file", FileUtil.readFile(NO_FILE), is(empty()));
         // Try this file
-        thisFile = FileUtil.readFile(THISCLASS);
+        List<String> thisFile = FileUtil.readFile(THISCLASS);
         // Comment ONE line
         int lineOne = 0;
         // Comment TWO line
@@ -64,39 +88,37 @@ public class FileUtilTest {
             String line = thisFile.get(i);
             if (lineOne == 0 && line.contains("Comment ONE line")) {
                 lineOne = i;
-                continue;
-            }
-            if (lineTwo == 0 && line.contains("Comment TWO line")) {
+            } else if (lineTwo == 0 && line.contains("Comment TWO line")) {
                 lineTwo = i;
                 break;
             }
         }
-        assertEquals(2, lineTwo - lineOne);
+        assertThat("Comment line difference", lineTwo - lineOne, is(2));
     }
 
     /**
      * Test get*FromFile
      */
     @Test
-    public void testGetFromFile() {
-        assertEquals(123L, FileUtil.getUnsignedLongFromFile(INT_FILE));
-        assertEquals(0L, FileUtil.getUnsignedLongFromFile(STRING_FILE));
-        assertEquals(0L, FileUtil.getUnsignedLongFromFile(NO_FILE));
+    void testGetFromFile() {
+        assertThat("unsigned long from int", FileUtil.getUnsignedLongFromFile(INT_FILE), is(123L));
+        assertThat("unsigned long from string", FileUtil.getUnsignedLongFromFile(STRING_FILE), is(0L));
+        assertThat("unsigned long from invalid", FileUtil.getUnsignedLongFromFile(NO_FILE), is(0L));
 
-        assertEquals(123L, FileUtil.getLongFromFile(INT_FILE));
-        assertEquals(0L, FileUtil.getLongFromFile(STRING_FILE));
-        assertEquals(0L, FileUtil.getLongFromFile(NO_FILE));
+        assertThat("long from int", FileUtil.getLongFromFile(INT_FILE), is(123L));
+        assertThat("long from string", FileUtil.getLongFromFile(STRING_FILE), is(0L));
+        assertThat("long from invalid", FileUtil.getLongFromFile(NO_FILE), is(0L));
 
-        assertEquals(123, FileUtil.getIntFromFile(INT_FILE));
-        assertEquals(0, FileUtil.getIntFromFile(STRING_FILE));
-        assertEquals(0, FileUtil.getIntFromFile(NO_FILE));
+        assertThat("int from int", FileUtil.getIntFromFile(INT_FILE), is(123));
+        assertThat("int from string", FileUtil.getIntFromFile(STRING_FILE), is(0));
+        assertThat("int from invalid", FileUtil.getIntFromFile(NO_FILE), is(0));
 
-        assertEquals("123", FileUtil.getStringFromFile(INT_FILE));
-        assertEquals("", FileUtil.getStringFromFile(NO_FILE));
+        assertThat("string from int", FileUtil.getStringFromFile(INT_FILE), is("123"));
+        assertThat("string from invalid ", FileUtil.getStringFromFile(NO_FILE), is(emptyString()));
     }
 
     @Test
-    public void testReadProcIo() {
+    void testReadProcIo() {
         Map<String, String> expected = new HashMap<>();
         expected.put("rchar", "124788352");
         expected.put("wchar", "124802481");
@@ -106,9 +128,17 @@ public class FileUtilTest {
         expected.put("write_bytes", "124780544");
         expected.put("cancelled_write_bytes", "42");
         Map<String, String> actual = FileUtil.getKeyValueMapFromFile(PROCIO_FILE, ":");
-        assertEquals(expected.size(), actual.size());
-        for (String key : expected.keySet()) {
-            assertEquals(expected.get(key), actual.get(key));
+        assertThat("procio size", actual, is(aMapWithSize(expected.size())));
+        for (Entry<String, String> entry : expected.entrySet()) {
+            assertThat("procio entry", actual, hasEntry(entry.getKey(), entry.getValue()));
         }
+    }
+
+    @Test
+    void testReadProperties() {
+        Properties props = FileUtil.readPropertiesFromFilename("simplelogger.properties");
+        assertThat("simplelogger properties", props.getProperty("org.slf4j.simpleLogger.defaultLogLevel"), is("INFO"));
+        props = FileUtil.readPropertiesFromFilename("this.file.does.not.exist");
+        assertThat("invalid file", props.stringPropertyNames(), is(empty()));
     }
 }

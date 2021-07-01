@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,20 +23,30 @@
  */
 package oshi.hardware.common;
 
+import oshi.annotation.concurrent.Immutable;
 import oshi.hardware.SoundCard;
 
 /**
  * An abstract Sound Card
- *
- * @author BilalAM
  */
+@Immutable
 public abstract class AbstractSoundCard implements SoundCard {
 
     private String kernelVersion;
     private String name;
     private String codec;
 
-    public AbstractSoundCard(String kernelVersion, String name, String codec) {
+    /**
+     * Abstract Sound Card Constructor
+     *
+     * @param kernelVersion
+     *            The version
+     * @param name
+     *            The name
+     * @param codec
+     *            The codec
+     */
+    protected AbstractSoundCard(String kernelVersion, String name, String codec) {
         this.kernelVersion = kernelVersion;
         this.name = name;
         this.codec = codec;
@@ -47,17 +57,9 @@ public abstract class AbstractSoundCard implements SoundCard {
         return this.kernelVersion;
     }
 
-    public void setKernelVersion(String kernelVersion) {
-        this.kernelVersion = kernelVersion;
-    }
-
     @Override
     public String getName() {
         return this.name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
     }
 
     @Override
@@ -65,19 +67,15 @@ public abstract class AbstractSoundCard implements SoundCard {
         return this.codec;
     }
 
-    public void setCodec(String codec) {
-        this.codec = codec;
-    }
-
     @Override
     public String toString() {
         StringBuilder builder = new StringBuilder();
         builder.append("SoundCard@");
         builder.append(Integer.toHexString(hashCode()));
-        builder.append(" [kernelVersion=");
-        builder.append(this.kernelVersion);
-        builder.append(", name=");
+        builder.append(" [name=");
         builder.append(this.name);
+        builder.append(", kernelVersion=");
+        builder.append(this.kernelVersion);
         builder.append(", codec=");
         builder.append(this.codec);
         builder.append(']');

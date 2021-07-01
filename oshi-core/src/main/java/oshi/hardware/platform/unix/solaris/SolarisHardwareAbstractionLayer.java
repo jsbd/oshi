@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,10 +23,14 @@
  */
 package oshi.hardware.platform.unix.solaris;
 
+import java.util.List;
+
+import oshi.annotation.concurrent.ThreadSafe;
 import oshi.hardware.CentralProcessor;
 import oshi.hardware.ComputerSystem;
 import oshi.hardware.Display;
 import oshi.hardware.GlobalMemory;
+import oshi.hardware.GraphicsCard;
 import oshi.hardware.HWDiskStore;
 import oshi.hardware.NetworkIF;
 import oshi.hardware.PowerSource;
@@ -34,97 +38,66 @@ import oshi.hardware.Sensors;
 import oshi.hardware.SoundCard;
 import oshi.hardware.UsbDevice;
 import oshi.hardware.common.AbstractHardwareAbstractionLayer;
+import oshi.hardware.platform.unix.UnixDisplay;
 
-public class SolarisHardwareAbstractionLayer extends AbstractHardwareAbstractionLayer {
+/**
+ * SolarisHardwareAbstractionLayer class.
+ */
+@ThreadSafe
+public final class SolarisHardwareAbstractionLayer extends AbstractHardwareAbstractionLayer {
 
-    private static final long serialVersionUID = 1L;
-
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public ComputerSystem getComputerSystem() {
-        if (this.computerSystem == null) {
-            this.computerSystem = new SolarisComputerSystem();
-        }
-        return this.computerSystem;
+    public ComputerSystem createComputerSystem() {
+        return new SolarisComputerSystem();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public GlobalMemory getMemory() {
-        if (this.memory == null) {
-            this.memory = new SolarisGlobalMemory();
-        }
-        return this.memory;
+    public GlobalMemory createMemory() {
+        return new SolarisGlobalMemory();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public CentralProcessor getProcessor() {
-        if (this.processor == null) {
-            this.processor = new SolarisCentralProcessor();
-        }
-        return this.processor;
+    public CentralProcessor createProcessor() {
+        return new SolarisCentralProcessor();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public PowerSource[] getPowerSources() {
+    public Sensors createSensors() {
+        return new SolarisSensors();
+    }
+
+    @Override
+    public List<PowerSource> getPowerSources() {
         return SolarisPowerSource.getPowerSources();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public HWDiskStore[] getDiskStores() {
-        return new SolarisDisks().getDisks();
+    public List<HWDiskStore> getDiskStores() {
+        return SolarisHWDiskStore.getDisks();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public Display[] getDisplays() {
-        return SolarisDisplay.getDisplays();
+    public List<Display> getDisplays() {
+        return UnixDisplay.getDisplays();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public Sensors getSensors() {
-        if (this.sensors == null) {
-            this.sensors = new SolarisSensors();
-        }
-        return this.sensors;
+    public List<NetworkIF> getNetworkIFs(boolean includeLocalInterfaces) {
+        return SolarisNetworkIF.getNetworks(includeLocalInterfaces);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public NetworkIF[] getNetworkIFs() {
-        return new SolarisNetworks().getNetworks();
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public UsbDevice[] getUsbDevices(boolean tree) {
+    public List<UsbDevice> getUsbDevices(boolean tree) {
         return SolarisUsbDevice.getUsbDevices(tree);
     }
 
     @Override
-    public SoundCard[] getSoundCards() {
-        return SolarisSoundCard.getSoundCards().toArray(new SoundCard[0]);
+    public List<SoundCard> getSoundCards() {
+        return SolarisSoundCard.getSoundCards();
+    }
+
+    @Override
+    public List<GraphicsCard> getGraphicsCards() {
+        return SolarisGraphicsCard.getGraphicsCards();
     }
 }

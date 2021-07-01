@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,96 +23,178 @@
  */
 package oshi.software.os;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.anything;
+import static org.hamcrest.Matchers.both;
+import static org.hamcrest.Matchers.closeTo;
+import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.emptyString;
+import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.lessThan;
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.oneOf;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.TestInstance.Lifecycle;
 
-import oshi.PlatformEnum;
+import com.sun.jna.Platform;
+
 import oshi.SystemInfo;
+import oshi.software.os.OSProcess.State;
+import oshi.software.os.OperatingSystem.OSVersionInfo;
+import oshi.software.os.OperatingSystem.ProcessFiltering;
+import oshi.software.os.OperatingSystem.ProcessSorting;
 
 /**
  * Test OS
  */
-public class OperatingSystemTest {
+@TestInstance(Lifecycle.PER_CLASS)
+class OperatingSystemTest {
 
-    /**
-     * Test operating system
-     */
-    @Test
-    public void testOperatingSystem() {
+    private OperatingSystem os = null;
+    private OSProcess proc = null;
+
+    @BeforeAll
+    void setUp() {
         SystemInfo si = new SystemInfo();
-        OperatingSystem os = si.getOperatingSystem();
-        assertNotNull(os.getFamily());
-        assertNotNull(os.getManufacturer());
-        OperatingSystemVersion version = os.getVersion();
-        assertNotNull(version);
-        assertNotNull(version.getVersion());
-        assertNotNull(version.getCodeName());
-        assertNotNull(version.getBuildNumber());
+        this.os = si.getOperatingSystem();
+        this.proc = os.getProcess(os.getProcessId());
+    }
 
-        assertTrue(os.getProcessCount() >= 1);
-        assertTrue(os.getThreadCount() >= 1);
-        assertTrue(os.getBitness() == 32 || os.getBitness() == 64);
-        assertTrue(os.getProcessId() > 0);
+    @Test
+    void testOperatingSystem() {
+        assertThat("OS family shouldn't be null", os.getFamily(), is(notNullValue()));
+        assertThat("OS manufacturer shouldn't be null", os.getManufacturer(), is(notNullValue()));
+        OSVersionInfo versionInfo = os.getVersionInfo();
+        assertThat("OS version info shouldn't be null", versionInfo, is(notNullValue()));
 
-        assertTrue(os.getProcesses(0, null).length > 0);
-        OSProcess proc = os.getProcess(os.getProcessId());
-        assertTrue(proc.getName().length() > 0);
-        assertTrue(proc.getPath().length() > 0);
-        assertTrue(proc.getCommandLine().length() > 0);
-        assertNotNull(proc.getCurrentWorkingDirectory());
-        assertNotNull(proc.getUser());
-        assertNotNull(proc.getUserID());
-        assertNotNull(proc.getGroup());
-        assertNotNull(proc.getGroupID());
-        assertNotNull(proc.getState());
-        assertEquals(proc.getProcessID(), os.getProcessId());
-        assertTrue(proc.getParentProcessID() > 0);
-        assertTrue(proc.getThreadCount() > 0);
-        assertTrue(proc.getPriority() >= -20 && proc.getPriority() <= 128);
-        assertTrue(proc.getVirtualSize() >= 0);
-        assertTrue(proc.getResidentSetSize() >= 0);
-        assertTrue(proc.getKernelTime() >= 0);
-        assertTrue(proc.getUserTime() >= 0);
-        assertTrue(proc.getUpTime() >= 0);
-        assertTrue(proc.calculateCpuPercent() >= 0d);
-        assertTrue(proc.getStartTime() >= 0);
-        assertTrue(proc.getBytesRead() >= 0);
-        assertTrue(proc.getBytesWritten() >= 0);
-        assertTrue(proc.getOpenFiles() >= -1);
+        assertThat("OS uptime in seconds should be greater than 0", os.getSystemUptime(), is(greaterThan(0L)));
+        assertThat("OS boot time in seconds since Unix epoch should be greater than 0", os.getSystemBootTime(),
+                is(greaterThan(0L)));
+        assertThat("OS boot time in seconds since Unix epoch should be before the current time", os.getSystemBootTime(),
+                is(lessThan(System.currentTimeMillis() / 1000L)));
+
+        assertThat("OS should have 1 or more currently running processes", os.getProcessCount(), is(greaterThan(0)));
+        assertThat("OS should have 1 or more currently running threads", os.getThreadCount(), is(greaterThan(0)));
+        assertThat("OS bitness should either be 32 or 64 ", os.getBitness(), is(oneOf(32, 64)));
+        assertThat("The current process id should be greater than 0", os.getProcessId(), is(greaterThan(0)));
+        // Just exercise this code without error
+        assertThat(
+                "The current process' permissions (if has sudo or Administrator privileges) should be determined correctly",
+                os.isElevated(), is(anything()));
+
+        assertThat("OS should have at least 1 currently running process", os.getProcesses(null, null, 0),
+                is(not(empty())));
+    }
+
+    @Test
+    void testProcessStrings() {
+        assertThat("Current running process name shouldn't be empty", proc.getName(), is(not(emptyString())));
+        assertThat("Current running process path name shouldn't be empty", proc.getPath(), is(not(emptyString())));
+        assertThat("Current running process command line shouldn't be null", proc.getCommandLine(), is(notNullValue()));
+        assertThat("Current running process working directory shouldn't be null", proc.getCurrentWorkingDirectory(),
+                is(notNullValue()));
+        assertThat("Current running process user name shouldn't be null", proc.getUser(), is(notNullValue()));
+        assertThat("Current running process user id shouldn't be null ", proc.getUserID(), is(notNullValue()));
+        assertThat("Current running process group shouldn't be null", proc.getGroup(), is(notNullValue()));
+        assertThat("Current running process group id shouldn't be null", proc.getGroupID(), is(notNullValue()));
+    }
+
+    @Test
+    void testProcessStats() {
+        assertThat("Current running process state shouldn't be INVALID", proc.getState(), is(not(State.INVALID)));
+        assertThat("Current running process id should be equal to the OS current running process id", os.getProcessId(),
+                is(proc.getProcessID()));
+        assertThat("Current running process parent process id should be 0 or higher", proc.getParentProcessID(),
+                is(greaterThanOrEqualTo(0)));
+        assertThat("Current running process thread count should be greater than 0", proc.getThreadCount(),
+                is(greaterThan(0)));
+        if (Platform.isAIX()) {
+            assertThat("Current running process priority should be between -20 and 255", proc.getPriority(),
+                    is(both(greaterThanOrEqualTo(1)).and(lessThanOrEqualTo(255))));
+        } else {
+            assertThat("Current running process priority should be between -20 and 128", proc.getPriority(),
+                    is(both(greaterThanOrEqualTo(-20)).and(lessThanOrEqualTo(128))));
+        }
+        assertThat("Current running process virtual memory size should be 0 or higher", proc.getVirtualSize(),
+                is(greaterThanOrEqualTo(0L)));
+        assertThat("Current running process resident set size should be 0 or higher", proc.getResidentSetSize(),
+                is(greaterThanOrEqualTo(0L)));
+        assertThat("Current running process time elapsed in system/kernel should be 0 or higher", proc.getKernelTime(),
+                is(greaterThanOrEqualTo(0L)));
+        assertThat("Current running process time elapsed in user mode should be 0 or higher", proc.getUserTime(),
+                is(greaterThanOrEqualTo(0L)));
+        assertThat("Current running process uptime should be 0 or higher", proc.getUpTime(),
+                is(greaterThanOrEqualTo(0L)));
+        assertThat("Current process minor faults should be 0 or higher", proc.getMinorFaults(),
+                is(greaterThanOrEqualTo(0L)));
+        assertThat("Current process major faults should be 0 or higher", proc.getMajorFaults(),
+                is(greaterThanOrEqualTo(0L)));
+        assertThat("Current process context switches should be 0 or higher", proc.getContextSwitches(),
+                is(greaterThanOrEqualTo(0L)));
+        assertThat("Current process cumulative cpu usage should be 0.0 or higher", proc.getProcessCpuLoadCumulative(),
+                is(greaterThanOrEqualTo(0d)));
+        assertThat("Current process cumulative cpu usage should be the same as the current process",
+                proc.getProcessCpuLoadBetweenTicks(null),
+                is(closeTo(proc.getProcessCpuLoadCumulative(), Double.MIN_VALUE)));
+        assertThat(
+                "Current process cumulative cpu usage should be the same for a previous snapshot of the same process",
+                proc.getProcessCpuLoadBetweenTicks(proc),
+                is(closeTo(proc.getProcessCpuLoadCumulative(), Double.MIN_VALUE)));
+        assertThat("Current process start time should be 0 or higher", proc.getStartTime(),
+                is(greaterThanOrEqualTo(0L)));
+        assertThat("Current process bytes read from disk should be 0 or higher", proc.getBytesRead(),
+                is(greaterThanOrEqualTo(0L)));
+        assertThat("Current process bytes written to disk should be 0 or higher", proc.getBytesWritten(),
+                is(greaterThanOrEqualTo(0L)));
+        assertThat("Process bitness can't exceed OS bitness", proc.getBitness(),
+                is(lessThanOrEqualTo(os.getBitness())));
+        assertThat("Bitness must be 0, 32 or 64", proc.getBitness(), is(oneOf(0, 32, 64)));
+        assertThat("Current process open file handles should be -1 or higher", proc.getOpenFiles(),
+                is(greaterThanOrEqualTo(-1L)));
+    }
+
+    @Test
+    void testThreads() {
+        List<OSThread> threads = proc.getThreadDetails();
+        for (OSThread thread : threads) {
+            assertThat("OS thread shouldn't be null", thread, is(notNullValue()));
+        }
     }
 
     /**
      * Tests process query by pid list
      */
     @Test
-    public void testProcessQueryByList() {
+    void testProcessQueryByList() {
         SystemInfo si = new SystemInfo();
         OperatingSystem os = si.getOperatingSystem();
-        assertNotNull(os.getFamily());
-        assertNotNull(os.getManufacturer());
-        OperatingSystemVersion version = os.getVersion();
-        assertNotNull(version);
-        assertNotNull(version.getVersion());
-        assertNotNull(version.getCodeName());
-        assertNotNull(version.getBuildNumber());
+        assertThat("OS family shouldn't be null", os.getFamily(), is(notNullValue()));
+        assertThat("OS manufacturer shouldn't be null", os.getManufacturer(), is(notNullValue()));
+        OSVersionInfo versionInfo = os.getVersionInfo();
+        assertThat("OS version info shouldn't be null", versionInfo, is(notNullValue()));
 
-        assertTrue(os.getProcessCount() >= 1);
-        assertTrue(os.getThreadCount() >= 1);
-        assertTrue(os.getProcessId() > 0);
+        assertThat("OS currently running processes should be 1 or higher", os.getProcessCount(), is(greaterThan(0)));
+        assertThat("OS thread count should be 1 or higher", os.getThreadCount(), is(greaterThan(0)));
+        assertThat("OS current running process id should be 0 or higher", os.getProcessId(),
+                is(greaterThanOrEqualTo(0)));
 
-        OSProcess[] processes = os.getProcesses(5, null);
-        assertNotNull(processes);
-        // every OS should have at least one process running on it
-        assertTrue(processes.length > 0);
+        List<OSProcess> processes = os.getProcesses(null, null, 0);
+        assertThat("Currently running processes shouldn't be null", processes, is(notNullValue()));
+        assertThat("every OS should have at least one process running on it", processes, is(not(empty())));
         // the list of pids we want info on
         List<Integer> pids = new ArrayList<>();
         for (OSProcess p : processes) {
@@ -120,8 +202,8 @@ public class OperatingSystemTest {
         }
         // query for just those processes
         Collection<OSProcess> processes1 = os.getProcesses(pids);
-        // theres a potential for a race condition here, if a process we queried
-        // for initially wasn't running during the second query. In this case,
+        // there's a potential for a race condition here, if a process we
+        // queried for initially wasn't running during the second query. In this case,
         // try again with the shorter list
         while (processes1.size() < pids.size()) {
             pids.clear();
@@ -131,145 +213,223 @@ public class OperatingSystemTest {
             // query for just those processes
             processes1 = os.getProcesses(pids);
         }
-        assertEquals(processes1.size(), pids.size());
+        assertThat("OS processes should match processes with pids we want info on", pids, hasSize(processes1.size()));
 
     }
 
     /**
-     * Tests child process getter
+     * Tests child and dependent process getter
      */
     @Test
-    public void testGetChildProcesses() {
-        // Get list of PIDS
+    void testGetChildAndDependentProcesses() {
+        // Testing child processes is tricky because we don't really know a priori what
+        // processes might have children, and if we do test the full list vs. individual
+        // processes, we run into a race condition where child processes can start or
+        // stop before we measure a second time. So we can't really test for one-to-one
+        // correspondence of child process lists.
+        //
+        // We can expect code logic failures to occur all/most of the time for
+        // categories of processes, however, and allow occasional differences due to
+        // race conditions. So we will test three categories of processes: Those with 0
+        // children, those with exactly 1 child process, and those with multiple child
+        // processes. On the second poll, we expect at least half of processes in those
+        // categories to still be in the same category.
+        //
         SystemInfo si = new SystemInfo();
         OperatingSystem os = si.getOperatingSystem();
-        OSProcess[] processes = os.getProcesses(0, null);
-        Map<Integer, Integer> childMap = new HashMap<>();
-        // First iteration to set all 0's
+        List<OSProcess> processes = os.getProcesses(null, null, 0);
+        Set<Integer> zeroChildSet = new HashSet<>();
+        Set<Integer> oneChildSet = new HashSet<>();
+        Set<Integer> manyChildSet = new HashSet<>();
+        // Initialize all processes with no children
         for (OSProcess p : processes) {
-            childMap.put(p.getProcessID(), 0);
-            childMap.put(p.getParentProcessID(), 0);
+            zeroChildSet.add(p.getProcessID());
         }
-        // Second iteration to count children
+        // Move parents with 1 or more children to other set
         for (OSProcess p : processes) {
-            childMap.put(p.getParentProcessID(), childMap.get(p.getParentProcessID()) + 1);
-        }
-        // Find a PID with 0, 1, and N>1 children
-        int zeroPid = -1;
-        int onePid = -1;
-        int nPid = -1;
-        int nNum = 0;
-        int mPid = -1;
-        int mNum = 0;
-        for (Integer i : childMap.keySet()) {
-            if (zeroPid < 0 && childMap.get(i) == 0) {
-                zeroPid = i;
-            } else if (onePid < 0 && childMap.get(i) == 1) {
-                onePid = i;
-            } else if (nPid < 0 && childMap.get(i) > 1) {
-                // nPid is probably PID=1 with all PIDs with no other parent
-                nPid = i;
-                nNum = childMap.get(i);
-            } else if (mPid < 0 && childMap.get(i) > 1) {
-                mPid = i;
-                mNum = childMap.get(i);
+            if (zeroChildSet.contains(p.getParentProcessID())) {
+                // Zero to One
+                zeroChildSet.remove(p.getParentProcessID());
+                oneChildSet.add(p.getParentProcessID());
+            } else if (oneChildSet.contains(p.getParentProcessID())) {
+                // One to many
+                oneChildSet.remove(p.getParentProcessID());
+                manyChildSet.add(p.getParentProcessID());
             }
-            if (zeroPid >= 0 && onePid >= 0 && nPid >= 0 && mPid >= 0) {
+        }
+        // Now test that majority of each set is in same category
+        // Zero
+        int matchedChild = 0;
+        int matchedDescendant = 0;
+        int descendantNotLessThanChild = 0;
+        int total = 0;
+        for (Integer i : zeroChildSet) {
+            List<OSProcess> children = os.getChildProcesses(i, null, null, 0);
+            List<OSProcess> descendants = os.getDescendantProcesses(i, null, null, 0);
+            if (children.size() == 0) {
+                matchedChild++;
+            }
+            if (descendants.size() == 0) {
+                matchedDescendant++;
+            }
+            // Quit if enough to test
+            if (++total > 9) {
                 break;
             }
         }
-        if (zeroPid >= 0) {
-            assertEquals(0, os.getChildProcesses(zeroPid, 0, null).length);
+        if (total > 5) {
+            assertThat("Most processes with no children should not suddenly have them.", matchedChild,
+                    is(greaterThan(total / 4)));
+            assertThat("Most processes with no children should not suddenly have descendants.", matchedDescendant,
+                    is(greaterThan(total / 4)));
         }
-        if (SystemInfo.getCurrentPlatformEnum() != PlatformEnum.SOLARIS) {
-            // Due to race condition, a process may terminate before we count
-            // its
-            // children.
-            if (onePid >= 0) {
-                assertTrue(0 <= os.getChildProcesses(onePid, 0, null).length);
+        // One child
+        matchedChild = 0;
+        matchedDescendant = 0;
+        descendantNotLessThanChild = 0;
+        total = 0;
+        for (Integer i : oneChildSet) {
+            List<OSProcess> children = os.getChildProcesses(i, null, null, 0);
+            List<OSProcess> descendants = os.getDescendantProcesses(i, null, null, 0);
+            if (children.size() == 1) {
+                matchedChild++;
             }
-            if (nPid >= 0) {
-                assertTrue(0 <= os.getChildProcesses(nPid, 0, null).length);
+            if (descendants.size() >= 1) {
+                matchedDescendant++;
             }
-            if (mPid >= 0) {
-                assertTrue(0 <= os.getChildProcesses(mPid, 0, null).length);
+            if (descendants.size() >= children.size()) {
+                descendantNotLessThanChild++;
             }
-            // At least one of these tests should work.
-            if (onePid >= 0 && nPid >= 0 && mPid >= 0) {
-                assertTrue(os.getChildProcesses(onePid, 0, null).length == 1
-                        || os.getChildProcesses(nPid, 0, null).length == nNum
-                        || os.getChildProcesses(mPid, 0, null).length == mNum);
+            // Quit if enough to test
+            if (++total > 9) {
+                break;
             }
+        }
+        if (total > 5) {
+            assertThat("Most processes with one child should not suddenly have zero or more than one.", matchedChild,
+                    is(greaterThan(total / 4)));
+            assertThat("Most processes with one child should not suddenly have zero descendants.", matchedDescendant,
+                    is(greaterThan(total / 4)));
+            assertThat("Most processes with one child should have no more children than descendants",
+                    descendantNotLessThanChild, is(greaterThan(total / 4)));
+        }
+        // Many children
+        matchedChild = 0;
+        matchedDescendant = 0;
+        descendantNotLessThanChild = 0;
+        total = 0;
+        for (Integer i : manyChildSet) {
+            // Use a non-null sorting for test purposes
+            List<OSProcess> children = os.getChildProcesses(i, ProcessFiltering.ALL_PROCESSES, ProcessSorting.CPU_DESC,
+                    Integer.MAX_VALUE);
+            List<OSProcess> descendants = os.getDescendantProcesses(i, ProcessFiltering.ALL_PROCESSES,
+                    ProcessSorting.CPU_DESC, Integer.MAX_VALUE);
+            if (children.size() > 1) {
+                matchedChild++;
+            }
+            if (descendants.size() > 1) {
+                matchedDescendant++;
+            }
+            if (descendants.size() >= children.size()) {
+                descendantNotLessThanChild++;
+            }
+            // Quit if enough to test
+            if (++total > 9) {
+                break;
+            }
+        }
+        if (total > 5) {
+            assertThat("Most processes with more than one child should not suddenly have one or less.", matchedChild,
+                    is(greaterThan(total / 4)));
+            assertThat("Most processes with more than one child should not suddenly have one or less descendants.",
+                    matchedDescendant, is(greaterThan(total / 4)));
+            assertThat("Most processes with more than one child should have no more children than descendants",
+                    descendantNotLessThanChild, is(greaterThan(total / 4)));
         }
     }
 
-    /**
-     * Test OSProcess setters and getters
-     */
     @Test
-    public void testOSProcessSetters() {
-        SystemInfo si = new SystemInfo();
-        OperatingSystem os = si.getOperatingSystem();
-        OSProcess oldProcess = os.getProcess(os.getProcessId());
-
-        OSProcess newProcess = new OSProcess();
-        newProcess.setName(oldProcess.getName());
-        newProcess.setPath(oldProcess.getPath());
-        newProcess.setCommandLine(oldProcess.getCommandLine());
-        newProcess.setCurrentWorkingDirectory(oldProcess.getCurrentWorkingDirectory());
-        newProcess.setUser(oldProcess.getUser());
-        newProcess.setUserID(oldProcess.getUserID());
-        newProcess.setGroup(oldProcess.getGroup());
-        newProcess.setGroupID(oldProcess.getGroupID());
-        newProcess.setState(oldProcess.getState());
-        newProcess.setProcessID(oldProcess.getProcessID());
-        newProcess.setParentProcessID(oldProcess.getParentProcessID());
-        newProcess.setThreadCount(oldProcess.getThreadCount());
-        newProcess.setPriority(oldProcess.getPriority());
-        newProcess.setVirtualSize(oldProcess.getVirtualSize());
-        newProcess.setResidentSetSize(oldProcess.getResidentSetSize());
-        newProcess.setKernelTime(oldProcess.getKernelTime());
-        newProcess.setUserTime(oldProcess.getUserTime());
-        newProcess.setUpTime(oldProcess.getUpTime());
-        newProcess.setStartTime(oldProcess.getStartTime());
-        newProcess.setBytesRead(oldProcess.getBytesRead());
-        newProcess.setBytesWritten(oldProcess.getBytesWritten());
-
-        assertEquals(oldProcess.getName(), newProcess.getName());
-        assertEquals(oldProcess.getPath(), newProcess.getPath());
-        assertEquals(oldProcess.getCommandLine(), newProcess.getCommandLine());
-        assertEquals(oldProcess.getCurrentWorkingDirectory(), newProcess.getCurrentWorkingDirectory());
-        assertEquals(oldProcess.getUser(), newProcess.getUser());
-        assertEquals(oldProcess.getUserID(), newProcess.getUserID());
-        assertEquals(oldProcess.getGroup(), newProcess.getGroup());
-        assertEquals(oldProcess.getGroupID(), newProcess.getGroupID());
-        assertEquals(oldProcess.getState(), newProcess.getState());
-        assertEquals(oldProcess.getProcessID(), newProcess.getProcessID());
-        assertEquals(oldProcess.getParentProcessID(), newProcess.getParentProcessID());
-        assertEquals(oldProcess.getThreadCount(), newProcess.getThreadCount());
-        assertEquals(oldProcess.getPriority(), newProcess.getPriority());
-        assertEquals(oldProcess.getVirtualSize(), newProcess.getVirtualSize());
-        assertEquals(oldProcess.getResidentSetSize(), newProcess.getResidentSetSize());
-        assertEquals(oldProcess.getKernelTime(), newProcess.getKernelTime());
-        assertEquals(oldProcess.getUserTime(), newProcess.getUserTime());
-        assertEquals(oldProcess.getUpTime(), newProcess.getUpTime());
-        assertEquals(oldProcess.getStartTime(), newProcess.getStartTime());
-        assertEquals(oldProcess.getBytesRead(), newProcess.getBytesRead());
-        assertEquals(oldProcess.getBytesWritten(), newProcess.getBytesWritten());
-    }
-
-    @Test
-    public void testGetCommandLine() {
+    void testGetCommandLine() {
         int processesWithNonEmptyCmdLine = 0;
 
         SystemInfo si = new SystemInfo();
         OperatingSystem os = si.getOperatingSystem();
-        for (OSProcess process : os.getProcesses(0, null)) {
+        for (OSProcess process : os.getProcesses(null, null, 0)) {
             if (!process.getCommandLine().trim().isEmpty()) {
                 processesWithNonEmptyCmdLine++;
             }
         }
 
-        assertTrue(processesWithNonEmptyCmdLine >= 1);
+        assertThat("Processes with non-empty command line should be 1 or higher", processesWithNonEmptyCmdLine,
+                is(greaterThan(0)));
+    }
+
+    /**
+     * Tests services getter
+     */
+    @Test
+    void testGetServices() {
+        SystemInfo si = new SystemInfo();
+        OperatingSystem os = si.getOperatingSystem();
+        int stopped = 0;
+        int running = 0;
+        for (OSService svc : os.getServices()) {
+            assertThat(svc.getName(), is(not(emptyString())));
+            switch (svc.getState()) {
+            case STOPPED:
+                stopped++;
+                break;
+            case RUNNING:
+                running++;
+                break;
+            default:
+                break;
+            }
+        }
+        // Should be at least one of each
+        assertThat("There should be at least 1 stopped service", stopped, is(greaterThan(0)));
+        assertThat("There should be at least 1 running service", running, is(greaterThan(0)));
+    }
+
+    /**
+     * Tests sessions getter
+     */
+    @Test
+    void testGetSessions() {
+        SystemInfo si = new SystemInfo();
+        OperatingSystem os = si.getOperatingSystem();
+        for (OSSession sess : os.getSessions()) {
+            assertThat("Logged in user's name for the session shouldn't be empty", sess.getUserName(),
+                    is(not(emptyString())));
+            assertThat("Sessions' terminal device name shouldn't be empty", sess.getTerminalDevice(),
+                    is(not(emptyString())));
+            // Login time
+            assertThat(
+                    String.format("Logon time should be before now: %d < %d%n%s", sess.getLoginTime(),
+                            System.currentTimeMillis(), sess),
+                    sess.getLoginTime(), is(lessThanOrEqualTo(System.currentTimeMillis())));
+            assertThat("Session host shouldn't be null", sess.getHost(), is(notNullValue()));
+        }
+    }
+
+    /**
+     * Test get desktop windows
+     */
+    @Test
+    void testGetDesktopWindows() {
+        SystemInfo si = new SystemInfo();
+        OperatingSystem os = si.getOperatingSystem();
+        List<OSDesktopWindow> allWindows = os.getDesktopWindows(false);
+        List<OSDesktopWindow> visibleWindows = os.getDesktopWindows(true);
+        assertThat("Visible should be a subset of all windows", visibleWindows.size(),
+                is(lessThanOrEqualTo(allWindows.size())));
+        Set<Long> windowIds = new HashSet<>();
+        for (OSDesktopWindow dw : visibleWindows) {
+            assertThat("Visible window should be visible", dw.isVisible(), is(true));
+            assertThat("Height should be nononegative", dw.getLocAndSize().height, is(greaterThanOrEqualTo(0)));
+            assertThat("Width should be nononegative", dw.getLocAndSize().width, is(greaterThanOrEqualTo(0)));
+            windowIds.add(dw.getWindowId());
+        }
+        assertThat("Window IDs should be unique", windowIds.size(), is(visibleWindows.size()));
     }
 }

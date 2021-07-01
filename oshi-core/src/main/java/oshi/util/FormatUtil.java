@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,20 +23,19 @@
  */
 package oshi.util;
 
-import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.math.RoundingMode;
 import java.util.concurrent.TimeUnit;
+
+import oshi.annotation.concurrent.ThreadSafe;
 
 /**
  * Formatting utility for appending units or converting between number types.
- *
- * @author dblock[at]dblock[dot]org
  */
-public class FormatUtil {
+@ThreadSafe
+public final class FormatUtil {
     /**
      * Binary prefixes, used in IEC Standard for naming bytes.
-     * (http://en.wikipedia.org/wiki/International_Electrotechnical_Commission)
+     * (https://en.wikipedia.org/wiki/International_Electrotechnical_Commission)
      *
      * Should be used for most representations of bytes
      */
@@ -48,32 +47,33 @@ public class FormatUtil {
     private static final long EXBI = 1L << 60;
 
     /**
-     * Decimal prefixes, used for Hz and other metric units and for bytes by
-     * hard drive manufacturers
+     * Decimal prefixes, used for Hz and other metric units and for bytes by hard
+     * drive manufacturers
      */
-    private static final long KILO = 1000L;
-    private static final long MEGA = 1000000L;
-    private static final long GIGA = 1000000000L;
-    private static final long TERA = 1000000000000L;
-    private static final long PETA = 1000000000000000L;
-    private static final long EXA = 1000000000000000000L;
+    private static final long KILO = 1_000L;
+    private static final long MEGA = 1_000_000L;
+    private static final long GIGA = 1_000_000_000L;
+    private static final long TERA = 1_000_000_000_000L;
+    private static final long PETA = 1_000_000_000_000_000L;
+    private static final long EXA = 1_000_000_000_000_000_000L;
 
     /*
      * Two's complement reference: 2^64.
      */
     private static final BigInteger TWOS_COMPLEMENT_REF = BigInteger.ONE.shiftLeft(64);
 
+    /** Constant <code>HEX_ERROR="0x%08X"</code> */
     public static final String HEX_ERROR = "0x%08X";
 
     private FormatUtil() {
     }
 
     /**
-     * Format bytes into a rounded string representation using IEC standard
-     * (matches Mac/Linux). For hard drive capacities, use @link
-     * {@link #formatBytesDecimal(long)}. For Windows displays for KB, MB and
-     * GB, in JEDEC units, edit the returned string to remove the 'i' to display
-     * the (incorrect) JEDEC units.
+     * Format bytes into a rounded string representation using IEC standard (matches
+     * Mac/Linux). For hard drive capacities, use @link
+     * {@link #formatBytesDecimal(long)}. For Windows displays for KB, MB and GB, in
+     * JEDEC units, edit the returned string to remove the 'i' to display the
+     * (incorrect) JEDEC units.
      *
      * @param bytes
      *            Bytes.
@@ -120,8 +120,8 @@ public class FormatUtil {
 
     /**
      * Format bytes into a rounded string representation using decimal SI units.
-     * These are used by hard drive manufacturers for capacity. Most other
-     * storage should use {@link #formatBytes(long)}.
+     * These are used by hard drive manufacturers for capacity. Most other storage
+     * should use {@link #formatBytes(long)}.
      *
      * @param bytes
      *            Bytes.
@@ -160,7 +160,7 @@ public class FormatUtil {
      */
     public static String formatValue(long value, String unit) {
         if (value < KILO) {
-            return String.format("%d %s", value, unit);
+            return String.format("%d %s", value, unit).trim();
         } else if (value < MEGA) { // K
             return formatUnits(value, KILO, "K" + unit);
         } else if (value < GIGA) { // M
@@ -196,20 +196,6 @@ public class FormatUtil {
     }
 
     /**
-     * Round to certain number of decimals.
-     *
-     * @param d
-     *            Number to be rounded
-     * @param decimalPlace
-     *            Number of decimal places to round to
-     * @return rounded result
-     */
-    public static float round(float d, int decimalPlace) {
-        final BigDecimal bd = new BigDecimal(Float.toString(d)).setScale(decimalPlace, RoundingMode.HALF_UP);
-        return bd.floatValue();
-    }
-
-    /**
      * Convert unsigned int to signed long.
      *
      * @param x
@@ -217,7 +203,7 @@ public class FormatUtil {
      * @return long value of x unsigned
      */
     public static long getUnsignedInt(int x) {
-        return x & 0x00000000ffffffffL;
+        return x & 0x0000_0000_ffff_ffffL;
     }
 
     /**
@@ -254,12 +240,23 @@ public class FormatUtil {
 
     /**
      * Translate an integer error code to its hex notation
-     * 
+     *
      * @param errorCode
      *            The error code
      * @return A string representing the error as 0x....
      */
     public static String formatError(int errorCode) {
         return String.format(HEX_ERROR, errorCode);
+    }
+
+    /**
+     * Rounds a floating point number to the nearest integer
+     *
+     * @param x
+     *            the floating point number
+     * @return the integer
+     */
+    public static int roundToInt(double x) {
+        return (int) Math.round(x);
     }
 }

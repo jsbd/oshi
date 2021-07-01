@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,133 +23,98 @@
  */
 package oshi.hardware.platform.linux;
 
+import static oshi.util.Memoizer.memoize;
+
+import java.util.function.Supplier;
+
+import oshi.annotation.concurrent.Immutable;
+import oshi.driver.linux.Devicetree;
+import oshi.driver.linux.Dmidecode;
+import oshi.driver.linux.Lshal;
+import oshi.driver.linux.Lshw;
+import oshi.driver.linux.Sysfs;
+import oshi.driver.linux.proc.CpuInfo;
 import oshi.hardware.Baseboard;
 import oshi.hardware.Firmware;
 import oshi.hardware.common.AbstractComputerSystem;
 import oshi.util.Constants;
-import oshi.util.ExecutingCommand;
-import oshi.util.FileUtil;
-import oshi.util.ParseUtil;
 
 /**
  * Hardware data obtained from sysfs.
  */
+@Immutable
 final class LinuxComputerSystem extends AbstractComputerSystem {
 
-    private static final long serialVersionUID = 1L;
+    private final Supplier<String> manufacturer = memoize(LinuxComputerSystem::queryManufacturer);
 
-    /**
-     * {@inheritDoc}
-     */
+    private final Supplier<String> model = memoize(LinuxComputerSystem::queryModel);
+
+    private final Supplier<String> serialNumber = memoize(LinuxComputerSystem::querySerialNumber);
+
+    private final Supplier<String> uuid = memoize(LinuxComputerSystem::queryUUID);
+
     @Override
     public String getManufacturer() {
-        if (this.manufacturer == null) {
-            final String sysVendor = FileUtil.getStringFromFile(Constants.SYSFS_SERIAL_PATH + "sys_vendor").trim();
-            if (!sysVendor.isEmpty()) {
-                this.manufacturer = sysVendor;
-            }
-        }
-        return super.getManufacturer();
+        return manufacturer.get();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public String getModel() {
-        if (this.model == null) {
-            final String productName = FileUtil.getStringFromFile(Constants.SYSFS_SERIAL_PATH + "product_name").trim();
-            final String productVersion = FileUtil.getStringFromFile(Constants.SYSFS_SERIAL_PATH + "product_version")
-                    .trim();
-            if (productName.isEmpty()) {
-                if (!productVersion.isEmpty()) {
-                    this.model = productVersion;
-                }
-            } else {
-                if (!productVersion.isEmpty() && !"None".equals(productVersion)) {
-                    this.model = productName + " (version: " + productVersion + ")";
-                } else {
-                    this.model = productName;
-                }
-            }
-        }
-        return super.getModel();
+        return model.get();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public String getSerialNumber() {
-        if (this.serialNumber == null) {
-            querySystemSerialNumber();
-        }
-        return this.serialNumber;
+        return serialNumber.get();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public Firmware getFirmware() {
-        if (this.firmware == null) {
-            this.firmware = new LinuxFirmware();
-        }
-        return this.firmware;
+    public String getHardwareUUID() {
+        return uuid.get();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public Baseboard getBaseboard() {
-        if (this.baseboard == null) {
-            this.baseboard = new LinuxBaseboard();
-        }
-        return this.baseboard;
+    public Firmware createFirmware() {
+        return new LinuxFirmware();
     }
 
-    private void querySystemSerialNumber() {
-        if (!querySerialFromSysfs() && !querySerialFromDmiDecode() && !querySerialFromLshal()) {
-            this.serialNumber = Constants.UNKNOWN;
-        }
+    @Override
+    public Baseboard createBaseboard() {
+        return new LinuxBaseboard();
     }
 
-    private boolean querySerialFromSysfs() {
-        // These sysfs files accessible by root, or can be chmod'd at boot time
-        // to enable access without root
-        String serialNumber = FileUtil.getStringFromFile(Constants.SYSFS_SERIAL_PATH + "product_serial");
-        if (serialNumber.isEmpty() || "None".equals(serialNumber)) {
-            serialNumber = FileUtil.getStringFromFile(Constants.SYSFS_SERIAL_PATH + "board_serial");
-            if (serialNumber.isEmpty() || "None".equals(serialNumber)) {
-                return false;
-            }
-            this.serialNumber = serialNumber;
+    private static String queryManufacturer() {
+        String result = null;
+        if ((result = Sysfs.querySystemVendor()) == null && (result = CpuInfo.queryCpuManufacturer()) == null) {
+            return Constants.UNKNOWN;
         }
-        return this.serialNumber != null && !this.serialNumber.isEmpty();
+        return result;
     }
 
-    private boolean querySerialFromDmiDecode() {
-        // If root privileges this will work
-        String marker = "Serial Number:";
-        for (String checkLine : ExecutingCommand.runNative("dmidecode -t system")) {
-            if (checkLine.contains(marker)) {
-                this.serialNumber = checkLine.split(marker)[1].trim();
-                break;
-            }
+    private static String queryModel() {
+        String result = null;
+        if ((result = Sysfs.queryProductModel()) == null && (result = Devicetree.queryModel()) == null
+                && (result = Lshw.queryModel()) == null) {
+            return Constants.UNKNOWN;
         }
-        return this.serialNumber != null && !this.serialNumber.isEmpty();
+        return result;
     }
 
-    private boolean querySerialFromLshal() {
-        // if lshal command available (HAL deprecated in newer linuxes)
-        String marker = "system.hardware.serial =";
-        for (String checkLine : ExecutingCommand.runNative("lshal")) {
-            if (checkLine.contains(marker)) {
-                this.serialNumber = ParseUtil.getSingleQuoteStringValue(checkLine);
-                break;
-            }
+    private static String querySerialNumber() {
+        String result = null;
+        if ((result = Sysfs.queryProductSerial()) == null && (result = Dmidecode.querySerialNumber()) == null
+                && (result = Lshal.querySerialNumber()) == null && (result = Lshw.querySerialNumber()) == null) {
+            return Constants.UNKNOWN;
         }
-        return this.serialNumber != null && !this.serialNumber.isEmpty();
+        return result;
+    }
+
+    private static String queryUUID() {
+        String result = null;
+        if ((result = Sysfs.queryUUID()) == null && (result = Dmidecode.queryUUID()) == null
+                && (result = Lshal.queryUUID()) == null && (result = Lshw.queryUUID()) == null) {
+            return Constants.UNKNOWN;
+        }
+        return result;
     }
 }

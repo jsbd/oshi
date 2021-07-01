@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,41 +23,53 @@
  */
 package oshi.hardware;
 
-import static org.junit.Assert.assertNotNull;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.matchesPattern;
+import static org.hamcrest.Matchers.notNullValue;
 
-import org.junit.Test;
+import java.util.regex.Pattern;
+
+import org.junit.jupiter.api.Test;
 
 import oshi.SystemInfo;
 
 /**
  * Tests Computer System
  */
-public class ComputerSystemTest {
+class ComputerSystemTest {
+    private static final Pattern UUID_PATTERN = Pattern
+            .compile("[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}|unknown");
 
     /**
      * Test Computer System
      */
     @Test
-    public void testComputerSystem() {
+    void testComputerSystem() {
         SystemInfo si = new SystemInfo();
         ComputerSystem cs = si.getHardware().getComputerSystem();
-        assertNotNull(cs.getManufacturer());
-        assertNotNull(cs.getModel());
-        assertNotNull(cs.getSerialNumber());
+        assertThat("Computer System's manufacturer shouldn't be null", cs.getManufacturer(), is(notNullValue()));
+        assertThat("Computer System's model shouldn't be null", cs.getModel(), is(notNullValue()));
+        assertThat("Computer System's serial number shouldn't be null", cs.getSerialNumber(), is(notNullValue()));
+        assertThat("Computer System's UUID should be in UUID format or unknown", cs.getHardwareUUID(),
+                matchesPattern(UUID_PATTERN));
 
         Firmware fw = cs.getFirmware();
-        assertNotNull(fw);
-        assertNotNull(fw.getManufacturer());
-        assertNotNull(fw.getName());
-        assertNotNull(fw.getDescription());
-        assertNotNull(fw.getVersion());
-        assertNotNull(fw.getReleaseDate());
+        assertThat("Firmware shouldn't be null", fw, is(notNullValue()));
+        assertThat("Firmware's manufacturer shouldn't be null", fw.getManufacturer(), is(notNullValue()));
+        assertThat("Firmware's name shouldn't be null", fw.getName(), is(notNullValue()));
+        assertThat("Firmware's description shouldn't be null", fw.getDescription(), is(notNullValue()));
+        assertThat("Firmware's version shouldn't be null", fw.getVersion(), is(notNullValue()));
+        assertThat("Firmware's release date shouldn't be null", fw.getReleaseDate(), is(notNullValue()));
+        assertThat("Firmware's tostring value should contain manufacturer's name", fw.toString(),
+                containsString(fw.getManufacturer()));
 
         Baseboard bb = cs.getBaseboard();
-        assertNotNull(bb);
-        assertNotNull(bb.getManufacturer());
-        assertNotNull(bb.getModel());
-        assertNotNull(bb.getVersion());
-        assertNotNull(bb.getSerialNumber());
+        assertThat("Baseboard shouldn't be null", bb, is(notNullValue()));
+        assertThat("Baseboard's manufacturer shouldn't be null", bb.getManufacturer(), is(notNullValue()));
+        assertThat("Baseboard's model shouldn't be null", bb.getModel(), is(notNullValue()));
+        assertThat("Baseboard's version shouldn't be null", bb.getVersion(), is(notNullValue()));
+        assertThat("Baseboard's serial number shouldn't be null", bb.getSerialNumber(), is(notNullValue()));
     }
 }

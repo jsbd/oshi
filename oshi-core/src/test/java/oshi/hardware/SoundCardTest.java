@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,29 +23,29 @@
  */
 package oshi.hardware;
 
-import org.junit.Test;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.notNullValue;
 
-import static org.junit.Assert.assertNotNull;
+import org.junit.jupiter.api.Test;
 
 import oshi.SystemInfo;
 
 /**
  * Test SoundCard
- *
- * @author BilalAM
  */
-public class SoundCardTest {
+class SoundCardTest {
 
     /**
      * Testing sound cards , each attribute.
      */
     @Test
-    public void testSoundCards() {
+    void testSoundCards() {
         SystemInfo info = new SystemInfo();
         for (SoundCard soundCard : info.getHardware().getSoundCards()) {
-            assertNotNull(soundCard.getCodec());
-            assertNotNull(soundCard.getDriverVersion());
-            assertNotNull(soundCard.getName());
+            assertThat("Sound card's codec should not be null", soundCard.getCodec(), is(notNullValue()));
+            assertThat("Sound card's driver should not be null", soundCard.getDriverVersion(), is(notNullValue()));
+            assertThat("Sound card's name should not be null", soundCard.getName(), is(notNullValue()));
         }
     }
 

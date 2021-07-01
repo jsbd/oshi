@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -39,15 +39,31 @@ import com.sun.jna.platform.win32.COM.COMUtils;
 import com.sun.jna.platform.win32.COM.Wbemcli;
 import com.sun.jna.platform.win32.COM.WbemcliUtil;
 
+import oshi.annotation.concurrent.ThreadSafe;
+import oshi.util.GlobalConfig;
+
+/**
+ * Utility to handle WMI Queries. Designed to be extended with user-customized
+ * behavior.
+ */
+@ThreadSafe
 public class WmiQueryHandler {
 
     private static final Logger LOG = LoggerFactory.getLogger(WmiQueryHandler.class);
 
+    private static int globalTimeout = GlobalConfig.get("oshi.util.wmi.timeout", -1);
+
+    static {
+        if (globalTimeout == 0 || globalTimeout < -1) {
+            throw new GlobalConfig.PropertyException("oshi.util.wmi.timeout");
+        }
+    }
+
     // Timeout for WMI queries
-    private int wmiTimeout = Wbemcli.WBEM_INFINITE;
+    protected int wmiTimeout = globalTimeout;
 
     // Cache failed wmi classes
-    private final Set<String> failedWmiClassNames = new HashSet<>();
+    protected final Set<String> failedWmiClassNames = new HashSet<>();
 
     // Preferred threading model
     private int comThreading = Ole32.COINIT_MULTITHREADED;
@@ -62,14 +78,14 @@ public class WmiQueryHandler {
     private static Class<? extends WmiQueryHandler> customClass = null;
 
     /**
-     * Factory method to create an instance of this class. To override this
-     * class, use {@link #setInstanceClass(Class)} to define a sublcass which
-     * extends {@link WmiQueryHandler}.
-     * 
+     * Factory method to create an instance of this class. To override this class,
+     * use {@link #setInstanceClass(Class)} to define a subclass which extends
+     * {@link oshi.util.platform.windows.WmiQueryHandler}.
+     *
      * @return An instance of this class or a class defined by
      *         {@link #setInstanceClass(Class)}
      */
-    public static WmiQueryHandler createInstance() {
+    public static synchronized WmiQueryHandler createInstance() {
         if (customClass == null) {
             return new WmiQueryHandler();
         }
@@ -85,36 +101,58 @@ public class WmiQueryHandler {
     }
 
     /**
-     * Define a subclass to be instantiated by {@link #createInstance()}. The
-     * class must extend {@link WmiQueryHandler}.
-     * 
+     * Define a subclass to be instantiated by {@link #createInstance()}. The class
+     * must extend {@link oshi.util.platform.windows.WmiQueryHandler}.
+     *
      * @param instanceClass
      *            The class to instantiate with {@link #createInstance()}.
      */
-    public static void setInstanceClass(Class<? extends WmiQueryHandler> instanceClass) {
+    public static synchronized void setInstanceClass(Class<? extends WmiQueryHandler> instanceClass) {
         customClass = instanceClass;
     }
 
     /**
-     * Query WMI for values, with no timeout.
+     * Query WMI for values. Makes no assumptions on whether the user has previously
+     * initialized COM.
      *
      * @param <T>
-     *            The properties enum
+     *            WMI queries use an Enum to identify the fields to query, and use
+     *            the enum values as keys to retrieve the results.
      * @param query
      *            A WmiQuery object encapsulating the namespace, class, and
      *            properties
-     * @return a WmiResult object containing the query results, wrapping an
-     *         EnumMap
+     * @return a WmiResult object containing the query results, wrapping an EnumMap
      */
     public <T extends Enum<T>> WbemcliUtil.WmiResult<T> queryWMI(WbemcliUtil.WmiQuery<T> query) {
+        return queryWMI(query, true);
+    }
 
+    /**
+     * Query WMI for values.
+     *
+     * @param <T>
+     *            WMI queries use an Enum to identify the fields to query, and use
+     *            the enum values as keys to retrieve the results.
+     * @param query
+     *            A WmiQuery object encapsulating the namespace, class, and
+     *            properties
+     * @param initCom
+     *            Whether to initialize COM. If {@code true}, initializes COM before
+     *            the query and uninitializes after. If {@code false}, assumes the
+     *            user has initialized COM separately. This can improve WMI query
+     *            performance.
+     * @return a WmiResult object containing the query results, wrapping an EnumMap
+     */
+    public <T extends Enum<T>> WbemcliUtil.WmiResult<T> queryWMI(WbemcliUtil.WmiQuery<T> query, boolean initCom) {
         WbemcliUtil.WmiResult<T> result = WbemcliUtil.INSTANCE.new WmiResult<>(query.getPropertyEnum());
         if (failedWmiClassNames.contains(query.getWmiClassName())) {
             return result;
         }
         boolean comInit = false;
         try {
-            comInit = initCOM();
+            if (initCom) {
+                comInit = initCOM();
+            }
             result = query.execute(wmiTimeout);
         } catch (COMException e) {
             // Ignore any exceptions with OpenHardwareMonitor
@@ -137,7 +175,7 @@ public class WmiQueryHandler {
                 failedWmiClassNames.add(query.getWmiClassName());
             }
         } catch (TimeoutException e) {
-            LOG.error("WMI query timed out after {} ms: {}", wmiTimeout, WmiUtil.queryToString(query));
+            LOG.warn("WMI query timed out after {} ms: {}", wmiTimeout, WmiUtil.queryToString(query));
         }
         if (comInit) {
             unInitCOM();
@@ -145,15 +183,24 @@ public class WmiQueryHandler {
         return result;
     }
 
+    /**
+     * COM Exception handler. Logs a warning message.
+     *
+     * @param query
+     *            a {@link com.sun.jna.platform.win32.COM.WbemcliUtil.WmiQuery}
+     *            object.
+     * @param ex
+     *            a {@link com.sun.jna.platform.win32.COM.COMException} object.
+     */
     protected void handleComException(WbemcliUtil.WmiQuery<?> query, COMException ex) {
         LOG.warn(
-                "COM exception querying {}, which might not be on your system. Will not attempt to query it again. Error was: {}:",
-                query.getWmiClassName(), ex.getMessage());
+                "COM exception querying {}, which might not be on your system. Will not attempt to query it again. Error was {}: {}",
+                query.getWmiClassName(), ex.getHresult().intValue(), ex.getMessage());
     }
 
     /**
      * Initializes COM library and sets security to impersonate the local user
-     * 
+     *
      * @return True if COM was initialized and needs to be uninitialized, false
      *         otherwise
      */
@@ -181,6 +228,14 @@ public class WmiQueryHandler {
         return comInit;
     }
 
+    /**
+     * Initializes COM with a specific threading model
+     *
+     * @param coInitThreading
+     *            The threading model
+     * @return True if COM was initialized and needs to be uninitialized, false
+     *         otherwise
+     */
     protected boolean initCOM(int coInitThreading) {
         WinNT.HRESULT hres = Ole32.INSTANCE.CoInitializeEx(null, coInitThreading);
         switch (hres.intValue()) {
@@ -199,8 +254,8 @@ public class WmiQueryHandler {
     }
 
     /**
-     * UnInitializes COM library. This should be called once for every
-     * successful call to initCOM.
+     * UnInitializes COM library. This should be called once for every successful
+     * call to initCOM.
      */
     public void unInitCOM() {
         Ole32.INSTANCE.CoUninitialize();
@@ -209,7 +264,7 @@ public class WmiQueryHandler {
     /**
      * Returns the current threading model for COM initialization, as OSHI is
      * required to match if an external program has COM initialized already.
-     * 
+     *
      * @return The current threading model
      */
     public int getComThreading() {
@@ -219,7 +274,7 @@ public class WmiQueryHandler {
     /**
      * Switches the current threading model for COM initialization, as OSHI is
      * required to match if an external program has COM initialized already.
-     * 
+     *
      * @return The new threading model after switching
      */
     public int switchComThreading() {
@@ -232,8 +287,8 @@ public class WmiQueryHandler {
     }
 
     /**
-     * Security only needs to be initialized once. This boolean identifies
-     * whether that has happened.
+     * Security only needs to be initialized once. This boolean identifies whether
+     * that has happened.
      *
      * @return Returns the securityInitialized.
      */
@@ -242,8 +297,8 @@ public class WmiQueryHandler {
     }
 
     /**
-     * Gets the current WMI timeout. WMI queries will fail if they take longer
-     * than this number of milliseconds. A value of -1 is infinite (no timeout).
+     * Gets the current WMI timeout. WMI queries will fail if they take longer than
+     * this number of milliseconds. A value of -1 is infinite (no timeout).
      *
      * @return Returns the current value of wmiTimeout.
      */
@@ -256,8 +311,8 @@ public class WmiQueryHandler {
      * number of milliseconds.
      *
      * @param wmiTimeout
-     *            The wmiTimeout to set, in milliseconds. To disable timeouts,
-     *            set timeout as -1 (infinite).
+     *            The wmiTimeout to set, in milliseconds. To disable timeouts, set
+     *            timeout as -1 (infinite).
      */
     public void setWmiTimeout(int wmiTimeout) {
         this.wmiTimeout = wmiTimeout;

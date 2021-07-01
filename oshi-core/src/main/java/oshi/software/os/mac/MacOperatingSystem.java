@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,85 +23,155 @@
  */
 package oshi.software.os.mac;
 
-import java.nio.charset.StandardCharsets;
+import static oshi.software.os.OSService.State.RUNNING;
+import static oshi.software.os.OSService.State.STOPPED;
+
+import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Properties;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.sun.jna.Memory;
-import com.sun.jna.Native;
-import com.sun.jna.Pointer;
-import com.sun.jna.platform.mac.SystemB;
-import com.sun.jna.platform.mac.SystemB.Group;
-import com.sun.jna.platform.mac.SystemB.Passwd;
-import com.sun.jna.platform.mac.SystemB.ProcTaskAllInfo;
+import com.sun.jna.platform.mac.SystemB; // NOSONAR squid:S1191
 import com.sun.jna.platform.mac.SystemB.ProcTaskInfo;
-import com.sun.jna.platform.mac.SystemB.RUsageInfoV2;
-import com.sun.jna.platform.mac.SystemB.VnodePathInfo;
-import com.sun.jna.ptr.IntByReference;
+import com.sun.jna.platform.mac.SystemB.Timeval;
 
+import oshi.annotation.concurrent.ThreadSafe;
+import oshi.driver.mac.Who;
+import oshi.driver.mac.WindowInfo;
 import oshi.software.common.AbstractOperatingSystem;
 import oshi.software.os.FileSystem;
+import oshi.software.os.InternetProtocolStats;
 import oshi.software.os.NetworkParams;
+import oshi.software.os.OSDesktopWindow;
 import oshi.software.os.OSProcess;
+import oshi.software.os.OSProcess.State;
+import oshi.software.os.OSService;
+import oshi.software.os.OSSession;
 import oshi.util.ExecutingCommand;
+import oshi.util.FileUtil;
 import oshi.util.ParseUtil;
+import oshi.util.Util;
 import oshi.util.platform.mac.SysctlUtil;
+import oshi.util.tuples.Pair;
 
+/**
+ * macOS, previously Mac OS X and later OS X) is a series of proprietary
+ * graphical operating systems developed and marketed by Apple Inc. since 2001.
+ * It is the primary operating system for Apple's Mac computers.
+ */
+@ThreadSafe
 public class MacOperatingSystem extends AbstractOperatingSystem {
-
-    private static final long serialVersionUID = 1L;
 
     private static final Logger LOG = LoggerFactory.getLogger(MacOperatingSystem.class);
 
+    public static final String MACOS_VERSIONS_PROPERTIES = "oshi.macos.versions.properties";
+
+    private static final String SYSTEM_LIBRARY_LAUNCH_AGENTS = "/System/Library/LaunchAgents";
+    private static final String SYSTEM_LIBRARY_LAUNCH_DAEMONS = "/System/Library/LaunchDaemons";
+
     private int maxProc = 1024;
-    /*
-     * OS X States:
-     */
-    private static final int SSLEEP = 1; // sleeping on high priority
-    private static final int SWAIT = 2; // sleeping on low priority
-    private static final int SRUN = 3; // running
-    private static final int SIDL = 4; // intermediate state in process creation
-    private static final int SZOMB = 5; // intermediate state in process
-                                        // termination
-    private static final int SSTOP = 6; // process being traced
 
-    public MacOperatingSystem() {
-        this.manufacturer = "Apple";
-        this.version = new MacOSVersionInfoEx();
-        this.family = ParseUtil.getFirstIntValue(this.version.getVersion()) == 10
-                && ParseUtil.getNthIntValue(this.version.getVersion(), 2) >= 12 ? "macOS"
-                        : System.getProperty("os.name");
-        // Set max processes
-        this.maxProc = SysctlUtil.sysctl("kern.maxproc", 0x1000);
-        initBitness();
-    }
+    private final String osXVersion;
+    private final int major;
+    private final int minor;
 
-    private void initBitness() {
-        if (this.bitness < 64) {
-            if (getVersion().getOsxVersionNumber() > 7) {
-                this.bitness = 64;
-            } else {
-                this.bitness = ParseUtil.parseIntOrDefault(ExecutingCommand.getFirstAnswer("getconf LONG_BIT"), 32);
-            }
+    private static final long BOOTTIME;
+    static {
+        Timeval tv = new Timeval();
+        if (!SysctlUtil.sysctl("kern.boottime", tv) || tv.tv_sec.longValue() == 0L) {
+            // Usually this works. If it doesn't, fall back to text parsing.
+            // Boot time will be the first consecutive string of digits.
+            BOOTTIME = ParseUtil.parseLongOrDefault(
+                    ExecutingCommand.getFirstAnswer("sysctl -n kern.boottime").split(",")[0].replaceAll("\\D", ""),
+                    System.currentTimeMillis() / 1000);
+        } else {
+            // tv now points to a 64-bit timeval structure for boot time.
+            // First 4 bytes are seconds, second 4 bytes are microseconds
+            // (we ignore)
+            BOOTTIME = tv.tv_sec.longValue();
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    public MacOperatingSystem() {
+        String version = System.getProperty("os.version");
+        int verMajor = ParseUtil.getFirstIntValue(version);
+        int verMinor = ParseUtil.getNthIntValue(version, 2);
+        // Big Sur (11.x) may return 10.16
+        if (verMajor == 10 && verMinor > 15) {
+            String swVers = ExecutingCommand.getFirstAnswer("sw_vers -productVersion");
+            if (!swVers.isEmpty()) {
+                version = swVers;
+            }
+            verMajor = ParseUtil.getFirstIntValue(version);
+            verMinor = ParseUtil.getNthIntValue(version, 2);
+        }
+        this.osXVersion = version;
+        this.major = verMajor;
+        this.minor = verMinor;
+        // Set max processes
+        this.maxProc = SysctlUtil.sysctl("kern.maxproc", 0x1000);
+    }
+
+    @Override
+    public String queryManufacturer() {
+        return "Apple";
+    }
+
+    @Override
+    public Pair<String, OSVersionInfo> queryFamilyVersionInfo() {
+        String family = this.major > 10 || (this.major == 10 && this.minor >= 12) ? "macOS"
+                : System.getProperty("os.name");
+        String codeName = parseCodeName();
+        String buildNumber = SysctlUtil.sysctl("kern.osversion", "");
+        return new Pair<>(family, new OSVersionInfo(this.osXVersion, codeName, buildNumber));
+    }
+
+    private String parseCodeName() {
+        Properties verProps = FileUtil.readPropertiesFromFilename(MACOS_VERSIONS_PROPERTIES);
+        String codeName = null;
+        if (this.major > 10) {
+            codeName = verProps.getProperty(Integer.toString(this.major));
+        } else if (this.major == 10) {
+            codeName = verProps.getProperty(this.major + "." + this.minor);
+        }
+        if (Util.isBlank(codeName)) {
+            LOG.warn("Unable to parse version {}.{} to a codename.", this.major, this.minor);
+        }
+        return codeName;
+    }
+
+    @Override
+    protected int queryBitness(int jvmBitness) {
+        if (jvmBitness == 64 || (this.major == 10 && this.minor > 6)) {
+            return 64;
+        }
+        return ParseUtil.parseIntOrDefault(ExecutingCommand.getFirstAnswer("getconf LONG_BIT"), 32);
+    }
+
     @Override
     public FileSystem getFileSystem() {
         return new MacFileSystem();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public OSProcess[] getProcesses(int limit, ProcessSort sort, boolean slowFields) {
+    public InternetProtocolStats getInternetProtocolStats() {
+        return new MacInternetProtocolStats(isElevated());
+    }
+
+    @Override
+    public List<OSSession> getSessions() {
+        return USE_WHO_COMMAND ? super.getSessions() : Who.queryUtxent();
+    }
+
+    @Override
+    public List<OSProcess> queryAllProcesses() {
         List<OSProcess> procs = new ArrayList<>();
         int[] pids = new int[this.maxProc];
         int numberOfProcesses = SystemB.INSTANCE.proc_listpids(SystemB.PROC_ALL_PIDS, 0, pids,
@@ -109,239 +179,46 @@ public class MacOperatingSystem extends AbstractOperatingSystem {
         for (int i = 0; i < numberOfProcesses; i++) {
             // Handle off-by-one bug in proc_listpids where the size returned
             // is: SystemB.INT_SIZE * (pids + 1)
-            if (pids[i] == 0) {
-                continue;
-            }
-
-            OSProcess proc = getProcess(pids[i], slowFields);
-            if (proc != null) {
-                procs.add(proc);
-            }
-        }
-        List<OSProcess> sorted = processSort(procs, limit, sort);
-        return sorted.toArray(new OSProcess[0]);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public OSProcess getProcess(int pid) {
-        return getProcess(pid, true);
-    }
-
-    private OSProcess getProcess(int pid, boolean slowFields) {
-        ProcTaskAllInfo taskAllInfo = new ProcTaskAllInfo();
-        if (0 > SystemB.INSTANCE.proc_pidinfo(pid, SystemB.PROC_PIDTASKALLINFO, 0, taskAllInfo, taskAllInfo.size())) {
-            return null;
-        }
-        String name = null;
-        String path = "";
-        Pointer buf = new Memory(SystemB.PROC_PIDPATHINFO_MAXSIZE);
-        if (0 < SystemB.INSTANCE.proc_pidpath(pid, buf, SystemB.PROC_PIDPATHINFO_MAXSIZE)) {
-            path = buf.getString(0).trim();
-            // Overwrite name with last part of path
-            String[] pathSplit = path.split("/");
-            if (pathSplit.length > 0) {
-                name = pathSplit[pathSplit.length - 1];
-            }
-        }
-        // If process is gone, return null
-        if (taskAllInfo.ptinfo.pti_threadnum < 1) {
-            return null;
-        }
-        if (name == null) {
-            // pbi_comm contains first 16 characters of name
-            // null terminated
-            for (int t = 0; t < taskAllInfo.pbsd.pbi_comm.length; t++) {
-                if (taskAllInfo.pbsd.pbi_comm[t] == 0) {
-                    name = new String(taskAllInfo.pbsd.pbi_comm, 0, t);
-                    break;
-                }
-            }
-        }
-        long bytesRead = 0;
-        long bytesWritten = 0;
-        if (getVersion().getOsxVersionNumber() >= 9) {
-            RUsageInfoV2 rUsageInfoV2 = new RUsageInfoV2();
-            if (0 == SystemB.INSTANCE.proc_pid_rusage(pid, SystemB.RUSAGE_INFO_V2, rUsageInfoV2)) {
-                bytesRead = rUsageInfoV2.ri_diskio_bytesread;
-                bytesWritten = rUsageInfoV2.ri_diskio_byteswritten;
-            }
-        }
-        long now = System.currentTimeMillis();
-        OSProcess proc = new OSProcess();
-        proc.setName(name);
-        proc.setPath(path);
-        switch (taskAllInfo.pbsd.pbi_status) {
-        case SSLEEP:
-            proc.setState(OSProcess.State.SLEEPING);
-            break;
-        case SWAIT:
-            proc.setState(OSProcess.State.WAITING);
-            break;
-        case SRUN:
-            proc.setState(OSProcess.State.RUNNING);
-            break;
-        case SIDL:
-            proc.setState(OSProcess.State.NEW);
-            break;
-        case SZOMB:
-            proc.setState(OSProcess.State.ZOMBIE);
-            break;
-        case SSTOP:
-            proc.setState(OSProcess.State.STOPPED);
-            break;
-        default:
-            proc.setState(OSProcess.State.OTHER);
-            break;
-        }
-        proc.setProcessID(pid);
-        proc.setParentProcessID(taskAllInfo.pbsd.pbi_ppid);
-        proc.setUserID(Integer.toString(taskAllInfo.pbsd.pbi_uid));
-        Passwd user = SystemB.INSTANCE.getpwuid(taskAllInfo.pbsd.pbi_uid);
-        proc.setUser(user == null ? proc.getUserID() : user.pw_name);
-        proc.setGroupID(Integer.toString(taskAllInfo.pbsd.pbi_gid));
-        Group group = SystemB.INSTANCE.getgrgid(taskAllInfo.pbsd.pbi_gid);
-        proc.setGroup(group == null ? proc.getGroupID() : group.gr_name);
-        proc.setThreadCount(taskAllInfo.ptinfo.pti_threadnum);
-        proc.setPriority(taskAllInfo.ptinfo.pti_priority);
-        proc.setVirtualSize(taskAllInfo.ptinfo.pti_virtual_size);
-        proc.setResidentSetSize(taskAllInfo.ptinfo.pti_resident_size);
-        proc.setKernelTime(taskAllInfo.ptinfo.pti_total_system / 1000000L);
-        proc.setUserTime(taskAllInfo.ptinfo.pti_total_user / 1000000L);
-        proc.setStartTime(taskAllInfo.pbsd.pbi_start_tvsec * 1000L + taskAllInfo.pbsd.pbi_start_tvusec / 1000L);
-        proc.setUpTime(now - proc.getStartTime());
-        proc.setBytesRead(bytesRead);
-        proc.setBytesWritten(bytesWritten);
-        proc.setCommandLine(getCommandLine(pid));
-        // gets the open files count
-        proc.setOpenFiles(taskAllInfo.pbsd.pbi_nfiles);
-
-        VnodePathInfo vpi = new VnodePathInfo();
-        if (0 < SystemB.INSTANCE.proc_pidinfo(pid, SystemB.PROC_PIDVNODEPATHINFO, 0, vpi, vpi.size())) {
-            int len = 0;
-            for (byte b : vpi.pvi_cdir.vip_path) {
-                if (b == 0) {
-                    break;
-                }
-                len++;
-            }
-            proc.setCurrentWorkingDirectory(new String(vpi.pvi_cdir.vip_path, 0, len, StandardCharsets.US_ASCII));
-        }
-        return proc;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public OSProcess[] getChildProcesses(int parentPid, int limit, ProcessSort sort) {
-        List<OSProcess> procs = new ArrayList<>();
-        int[] pids = new int[this.maxProc];
-        int numberOfProcesses = SystemB.INSTANCE.proc_listpids(SystemB.PROC_ALL_PIDS, 0, pids,
-                pids.length * SystemB.INT_SIZE) / SystemB.INT_SIZE;
-        for (int i = 0; i < numberOfProcesses; i++) {
-            // Handle off-by-one bug in proc_listpids where the size returned
-            // is: SystemB.INT_SIZE * (pids + 1)
-            if (pids[i] == 0) {
-                continue;
-            }
-            if (parentPid == getParentProcessPid(pids[i])) {
-                OSProcess proc = getProcess(pids[i], true);
+            if (pids[i] != 0) {
+                OSProcess proc = getProcess(pids[i]);
                 if (proc != null) {
                     procs.add(proc);
                 }
             }
         }
-        List<OSProcess> sorted = processSort(procs, limit, sort);
-        return sorted.toArray(new OSProcess[0]);
+        return procs;
     }
 
-    private int getParentProcessPid(int pid) {
-        ProcTaskAllInfo taskAllInfo = new ProcTaskAllInfo();
-        if (0 > SystemB.INSTANCE.proc_pidinfo(pid, SystemB.PROC_PIDTASKALLINFO, 0, taskAllInfo, taskAllInfo.size())) {
-            return 0;
-        }
-        return taskAllInfo.pbsd.pbi_ppid;
-    }
-
-    private String getCommandLine(int pid) {
-        // Get command line via sysctl
-        int[] mib = new int[3];
-        mib[0] = 1; // CTL_KERN
-        mib[1] = 49; // KERN_PROCARGS2
-        mib[2] = pid;
-        // Allocate memory for arguments
-        int argmax = SysctlUtil.sysctl("kern.argmax", 0);
-        Pointer procargs = new Memory(argmax);
-        IntByReference size = new IntByReference(argmax);
-        // Fetch arguments
-        if (0 != SystemB.INSTANCE.sysctl(mib, mib.length, procargs, size, null, 0)) {
-            LOG.error("Failed syctl call: kern.procargs2, Error code: {}", Native.getLastError());
-            return "";
-        }
-        // Procargs contains an int representing total # of args, followed by a
-        // null-terminated execpath string and then the arguments, each
-        // null-terminated (possible multiple consecutive nulls),
-        // The execpath string is also the first arg.
-        int nargs = procargs.getInt(0);
-        // Sanity check
-        if (nargs < 0 || nargs > 1024) {
-            LOG.error("Nonsensical number of process arguments for pid {}: {}", pid, nargs);
-            return "";
-        }
-        List<String> args = new ArrayList<>(nargs);
-        // Skip first int (containing value of nargs)
-        long offset = SystemB.INT_SIZE;
-        // Skip exec_command
-        offset += procargs.getString(offset).length();
-        // Iterate character by character using offset
-        // Build each arg and add to list
-        while (nargs-- > 0 && offset < size.getValue()) {
-            // Advance through additional nulls
-            while (procargs.getByte(offset) == 0) {
-                if (++offset >= size.getValue()) {
-                    break;
-                }
-            }
-            // Grab a string. This should go until the null terminator
-            String arg = procargs.getString(offset);
-            args.add(arg);
-            // Advance offset to next null
-            offset += arg.length();
-        }
-        // Return args null-delimited
-        return String.join("\0", args);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public MacOSVersionInfoEx getVersion() {
-        return (MacOSVersionInfoEx) this.version;
+    public OSProcess getProcess(int pid) {
+        OSProcess proc = new MacOSProcess(pid, this.minor);
+        return proc.getState().equals(State.INVALID) ? null : proc;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
+    public List<OSProcess> queryChildProcesses(int parentPid) {
+        List<OSProcess> allProcs = queryAllProcesses();
+        Set<Integer> descendantPids = getChildrenOrDescendants(allProcs, parentPid, false);
+        return allProcs.stream().filter(p -> descendantPids.contains(p.getProcessID())).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<OSProcess> queryDescendantProcesses(int parentPid) {
+        List<OSProcess> allProcs = queryAllProcesses();
+        Set<Integer> descendantPids = getChildrenOrDescendants(allProcs, parentPid, true);
+        return allProcs.stream().filter(p -> descendantPids.contains(p.getProcessID())).collect(Collectors.toList());
+    }
+
     @Override
     public int getProcessId() {
         return SystemB.INSTANCE.getpid();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public int getProcessCount() {
         return SystemB.INSTANCE.proc_listpids(SystemB.PROC_ALL_PIDS, 0, null, 0) / SystemB.INT_SIZE;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public int getThreadCount() {
         // Get current pids, then slightly pad in case new process starts while
@@ -352,18 +229,68 @@ public class MacOperatingSystem extends AbstractOperatingSystem {
         int numberOfThreads = 0;
         ProcTaskInfo taskInfo = new ProcTaskInfo();
         for (int i = 0; i < numberOfProcesses; i++) {
-            SystemB.INSTANCE.proc_pidinfo(pids[i], SystemB.PROC_PIDTASKINFO, 0, taskInfo, taskInfo.size());
-            numberOfThreads += taskInfo.pti_threadnum;
+            int exit = SystemB.INSTANCE.proc_pidinfo(pids[i], SystemB.PROC_PIDTASKINFO, 0, taskInfo, taskInfo.size());
+            if (exit != -1) {
+                numberOfThreads += taskInfo.pti_threadnum;
+            }
         }
         return numberOfThreads;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
+    public long getSystemUptime() {
+        return System.currentTimeMillis() / 1000 - BOOTTIME;
+    }
+
+    @Override
+    public long getSystemBootTime() {
+        return BOOTTIME;
+    }
+
     @Override
     public NetworkParams getNetworkParams() {
         return new MacNetworkParams();
     }
 
+    @Override
+    public OSService[] getServices() {
+        // Get running services
+        List<OSService> services = new ArrayList<>();
+        Set<String> running = new HashSet<>();
+        for (OSProcess p : getChildProcesses(1, ProcessFiltering.ALL_PROCESSES, ProcessSorting.PID_ASC, 0)) {
+            OSService s = new OSService(p.getName(), p.getProcessID(), RUNNING);
+            services.add(s);
+            running.add(p.getName());
+        }
+        // Get Directories for stopped services
+        ArrayList<File> files = new ArrayList<>();
+        File dir = new File(SYSTEM_LIBRARY_LAUNCH_AGENTS);
+        if (dir.exists() && dir.isDirectory()) {
+            files.addAll(Arrays.asList(dir.listFiles((f, name) -> name.toLowerCase().endsWith(".plist"))));
+        } else {
+            LOG.error("Directory: /System/Library/LaunchAgents does not exist");
+        }
+        dir = new File(SYSTEM_LIBRARY_LAUNCH_DAEMONS);
+        if (dir.exists() && dir.isDirectory()) {
+            files.addAll(Arrays.asList(dir.listFiles((f, name) -> name.toLowerCase().endsWith(".plist"))));
+        } else {
+            LOG.error("Directory: /System/Library/LaunchDaemons does not exist");
+        }
+        for (File f : files) {
+            // remove .plist extension
+            String name = f.getName().substring(0, f.getName().length() - 6);
+            int index = name.lastIndexOf('.');
+            String shortName = (index < 0 || index > name.length() - 2) ? name : name.substring(index + 1);
+            if (!running.contains(name) && !running.contains(shortName)) {
+                OSService s = new OSService(name, 0, STOPPED);
+                services.add(s);
+            }
+        }
+        return services.toArray(new OSService[0]);
+    }
+
+    @Override
+    public List<OSDesktopWindow> getDesktopWindows(boolean visibleOnly) {
+        return WindowInfo.queryDesktopWindows(visibleOnly);
+    }
 }

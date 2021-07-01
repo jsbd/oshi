@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -25,25 +25,28 @@ package oshi.hardware.common;
 
 import java.util.Arrays;
 
+import oshi.annotation.concurrent.Immutable;
 import oshi.hardware.Display;
 import oshi.util.EdidUtil;
 
 /**
  * A Display
  */
+@Immutable
 public abstract class AbstractDisplay implements Display {
 
-    private static final long serialVersionUID = 1L;
-
-    protected byte[] edid;
-
-    protected AbstractDisplay(byte[] edid) {
-        this.edid = edid;
-    }
+    private final byte[] edid;
 
     /**
-     * {@inheritDoc}
+     * Constructor for AbstractDisplay.
+     *
+     * @param edid
+     *            a byte array representing a display EDID
      */
+    protected AbstractDisplay(byte[] edid) {
+        this.edid = Arrays.copyOf(edid, edid.length);
+    }
+
     @Override
     public byte[] getEdid() {
         return Arrays.copyOf(this.edid, this.edid.length);

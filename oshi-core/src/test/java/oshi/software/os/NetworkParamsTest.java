@@ -1,8 +1,7 @@
-/**
- * OSHI (https://github.com/oshi/oshi)
+/*
+ * MIT License
  *
- * Copyright (c) 2010 - 2019 The OSHI Project Team:
- * https://github.com/oshi/oshi/graphs/contributors
+ * Copyright (c) 2010 - 2021 The OSHI Project Contributors: https://github.com/oshi/oshi/graphs/contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,9 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -23,28 +23,32 @@
  */
 package oshi.software.os;
 
-import static org.junit.Assert.assertNotNull;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.notNullValue;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import oshi.SystemInfo;
 
 /**
  * Test network parameters
  */
-public class NetworkParamsTest {
+class NetworkParamsTest {
 
     /**
      * Test network parameters
      */
     @Test
-    public void testOperatingSystem() {
+    void testNetworkParams() {
         SystemInfo si = new SystemInfo();
         NetworkParams params = si.getOperatingSystem().getNetworkParams();
-        assertNotNull(params.getHostName());
-        assertNotNull(params.getDomainName());
-        assertNotNull(params.getDnsServers());
-        assertNotNull(params.getIpv4DefaultGateway());
-        assertNotNull(params.getIpv6DefaultGateway());
+        assertThat("Network parameters hostname is null.", params.getHostName(), is(notNullValue()));
+        assertThat("Network parameters domain name is null.", params.getDomainName(), is(notNullValue()));
+        assertThat("Network parameters DNS server is null.", params.getDnsServers(), is(notNullValue()));
+        assertThat("Network parameters IPv4 default gateway is null.", params.getIpv4DefaultGateway(),
+                is(notNullValue()));
+        assertThat("Network parameters IPv6 default gateway is null.", params.getIpv6DefaultGateway(),
+                is(notNullValue()));
     }
 }
